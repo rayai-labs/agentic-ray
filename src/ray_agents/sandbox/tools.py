@@ -123,6 +123,68 @@ def execute_code(
 
 
 @ray.remote
+def execute_shell(
+    command: str,
+    session_id: str | None = None,
+    image: str = DEFAULT_IMAGE,
+    dockerfile: str | None = None,
+    environment: dict[str, str] | None = None,
+    volumes: dict[str, dict[str, str]] | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> ExecutionResult | ExecutionError:
+    """
+    Execute shell command in isolated Docker container.
+
+    Args:
+        command: Shell command to execute
+        session_id: Session identifier for persistence (optional, auto-generated if not provided)
+        image: Docker image to use (default: python:3.12-slim)
+        dockerfile: Custom Dockerfile string (optional, overrides image)
+        environment: Environment variables for container
+        volumes: Volume mounts for container. Format:
+            {'/host/path': {'bind': '/container/path', 'mode': 'ro'}}
+        timeout: Execution timeout in seconds
+
+    Returns:
+        Execution result with stdout, stderr, status
+
+    Example:
+        >>> # List files
+        >>> result = ray.get(execute_shell.remote("ls -la /mnt"))
+        >>> print(result["stdout"])
+
+        >>> # Install package and use in Python (same session)
+        >>> ray.get(execute_shell.remote("pip install numpy", session_id="my-session"))
+        >>> result = ray.get(execute_code.remote(
+        ...     "import numpy; print(numpy.__version__)",
+        ...     session_id="my-session"
+        ... ))
+
+        >>> # Inspect dataset
+        >>> ray.get(execute_shell.remote("wc -l /mnt/datasets/*.csv", session_id="my-session"))
+    """
+    # Generate session_id if not provided
+    if session_id is None:
+        session_id = f"session-{uuid.uuid4().hex[:8]}-{int(time.time())}"
+        logger.info(f"Auto-generated session_id: {session_id}")
+    else:
+        logger.info(f"Using provided session_id: {session_id}")
+
+    # Get or create executor for session
+    executor = _get_or_create_executor(
+        session_id, image, dockerfile, environment, volumes
+    )
+
+    # Execute shell command
+    logger.info(f"Executing shell command in session {session_id}: {command[:50]}...")
+    result: ExecutionResult | ExecutionError = ray.get(
+        executor.execute_shell.remote(command, timeout)
+    )
+
+    return result
+
+
+@ray.remote
 def install_package(
     package: str,
     session_id: str,

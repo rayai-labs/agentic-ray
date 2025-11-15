@@ -1,9 +1,9 @@
 """
-Code Interpreter Demo
+Sandbox Demo
 
-This example demonstrates how to use the Ray Code Interpreter with agents.
-The agent can execute Python code, install packages, and work with files
-in isolated Docker containers.
+This example demonstrates how to use the Ray Sandbox with agents.
+The agent can execute Python code, shell commands, install packages,
+and work with files in isolated Docker containers.
 
 Requirements:
     - Docker installed and running
@@ -11,7 +11,7 @@ Requirements:
     - OpenAI API key: export OPENAI_API_KEY=your-key
 
 Usage:
-    python -m ray_agents.examples.code_interpreter_demo
+    python -m ray_agents.examples.sandbox_demo
 """
 
 import logging
@@ -21,7 +21,7 @@ import ray
 
 from ray_agents import AgentSession
 from ray_agents.adapters.langgraph import LangGraphAdapter
-from ray_agents.code_interpreter import (
+from ray_agents.sandbox import (
     cleanup_session,
     execute_code,
     install_package,

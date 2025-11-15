@@ -65,17 +65,20 @@ You: What datasets are available?
 Agent: I'll check for you.
 
 ```python
+# Explore available MCP clients
+import os
+print(os.listdir('/mnt/servers'))  # ['datasets_client', 'mcp_client.py', ...]
+
+# Discover tools in datasets_client
+print(os.listdir('/mnt/servers/datasets_client'))  # ['list_datasets.py', ...]
+
+# Import and use only what's needed
 import sys
 sys.path.append('/mnt')
+from servers.datasets_client import list_datasets
 
-async def main():
-    from servers.filesystem import list_directory
-    result = await list_directory("/mnt/datasets")
-    for entry in result['entries']:
-        print(f"{entry['name']}")
-
-import asyncio
-asyncio.run(main())
+result = list_datasets()
+print(result['datasets'])
 ```
 
 [Executing code...]

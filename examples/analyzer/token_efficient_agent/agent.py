@@ -1,10 +1,9 @@
 """Token-Efficient Agent with Autonomous Code Execution
 
 This agent autonomously explores and executes Python code to analyze datasets.
-It uses OpenAI's function calling to execute code as a discoverable tool.
+The agent writes Python code directly, which is executed in a sandboxed environment.
 """
 
-import json
 import os
 
 # Import Ray code interpreter from main package
@@ -23,7 +22,12 @@ src_path = project_root / "src"
 if src_path.exists() and str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from ray_agents.code_interpreter import execute_code as ray_execute_code  # noqa: E402
+from ray_agents.sandbox import (  # noqa: E402
+    execute_code as ray_execute_code,
+)
+from ray_agents.sandbox import (
+    execute_shell as ray_execute_shell,
+)
 
 
 class TokenEfficientAgent:
@@ -33,16 +37,34 @@ class TokenEfficientAgent:
         "type": "function",
         "function": {
             "name": "execute_code",
-            "description": "Execute Python code in a sandboxed environment. Variables persist across executions within the same session. Use this to explore MCP tools, access datasets, and perform analysis.",
+            "description": "Execute Python code in a sandboxed environment. Variables persist across executions within the same session.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "code": {
                         "type": "string",
-                        "description": "Python code to execute. Always print() results you want to see.",
+                        "description": "Python code to execute. Always include necessary imports. Use print() to see results.",
                     }
                 },
                 "required": ["code"],
+            },
+        },
+    }
+
+    EXECUTE_SHELL_TOOL = {
+        "type": "function",
+        "function": {
+            "name": "execute_shell",
+            "description": "Execute shell command in the sandboxed environment. Use for: installing packages (pip install), file inspection (ls, head, wc), system commands.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Shell command to execute (e.g., 'pip install numpy', 'ls -lh /mnt/datasets')",
+                    }
+                },
+                "required": ["command"],
             },
         },
     }
@@ -88,27 +110,47 @@ class TokenEfficientAgent:
 
         self.conversation_history: list[dict[str, Any]] = []
 
-        self.system_prompt = """You are a data analysis assistant that autonomously explores and analyzes data.
+        self.system_prompt = """Data analysis assistant with Python code execution and shell access.
 
-Environment:
-- Sandboxed container with Python, pandas, numpy, matplotlib
-- /mnt/servers/ contains MCP tool modules you can import and use
-- Variables and imports persist across executions
-- Headless (no GUI) - always print() results you want to see
+Environment: Python 3.12 (pandas, numpy, matplotlib), headless - use print()
 
-Key points:
-- Datasets are NOT in the container filesystem
-- Explore /mnt/servers/ to discover available MCP tools
-- To import MCP modules: sys.path.append('/mnt') then import servers.MODULE_NAME
-- MCP tools are async functions - you MUST use asyncio.run() to call them
-  Example: result = asyncio.run(some_async_function())
+Tools Available:
+- execute_code: Run Python code (variables persist across calls)
+- execute_shell: Run shell commands (for pip install, grep, wc, etc.)
 
-Important reminders:
-- Once you import a module or define a variable, it persists - don't re-import unnecessarily
-- Always check the type/structure of returned data before using it (e.g., print type or keys)
-- If you get a NameError, the module wasn't imported in the current or previous execution
+CRITICAL - Dataset Access:
+- Datasets are NOT directly mounted - DO NOT use /mnt/datasets
+- Access datasets via MCP client tools in /mnt/servers/datasets_client/
+- Pattern:
+  import sys; sys.path.append('/mnt')
+  from servers.datasets_client import list_datasets, import_dataset
+  datasets = list_datasets()  # Get available datasets
+  result = import_dataset('file.csv')  # Get dataset content
+  # result['content'] contains the file as string
 
-Start by exploring what tools are available, then figure out how to access and analyze data."""
+CRITICAL - Data Processing:
+- NEVER print dataset content, MCP result dicts, or raw data
+- DO NOT print result['content'] or the result dict itself
+- DO NOT print DataFrames or large data structures
+- ONLY print final answers, summaries, and statistics
+- Pattern:
+  from io import StringIO
+  import pandas as pd
+  result = import_dataset('data.csv')  # DON'T print this
+  df = pd.read_csv(StringIO(result['content']))  # DON'T print this
+  answer = df['column'].value_counts().idxmax()  # Analyze
+  print(f"Most popular: {answer}")  # ONLY print answer
+
+CRITICAL - Imports:
+- Imports DO NOT persist between code blocks
+- EVERY code block must re-import ALL needed modules
+- Import pattern: sys.path.append('/mnt'); from servers.CLIENT import tool
+
+Shell Usage:
+- Install packages: execute_shell("pip install scikit-learn")
+- System commands: execute_shell("pip list | grep pandas")
+
+Work step-by-step. Variables persist, imports don't."""
 
     def chat(self, user_message: str) -> Generator[str, None, None]:
         """Chat with the agent - it will autonomously explore and execute code.
@@ -132,7 +174,7 @@ Start by exploring what tools are available, then figure out how to access and a
                         {"role": "system", "content": self.system_prompt},
                         *self.conversation_history,
                     ],
-                    tools=[self.EXECUTE_CODE_TOOL],
+                    tools=[self.EXECUTE_CODE_TOOL, self.EXECUTE_SHELL_TOOL],
                     tool_choice="auto",
                     temperature=0,
                 )
@@ -142,57 +184,47 @@ Start by exploring what tools are available, then figure out how to access and a
 
             message = response.choices[0].message
 
+            # Save assistant message to history
             self.conversation_history.append(message.model_dump(exclude_unset=True))
 
+            # Handle tool calls
             if message.tool_calls:
                 for tool_call in message.tool_calls:
+                    import json
+
+                    args = json.loads(tool_call.function.arguments)
+
+                    # Dispatch to appropriate handler
                     if tool_call.function.name == "execute_code":
-                        args = json.loads(tool_call.function.arguments)
                         code = args.get("code", "")
-
                         yield f"\n[Executing code]\n```python\n{code}\n```\n"
-
                         result = self._execute_code(code)
-                        if (
-                            result["status"] == "success"
-                            and result.get("exit_code", 0) == 0
-                        ):
-                            output = result.get("stdout", "").strip()
-                            if output:
-                                yield f"Output:\n{output}\n"
-                            else:
-                                yield "[No output - did you forget to print()?]\n"
-                        else:
-                            error = result.get("stderr") or result.get(
-                                "error", "Unknown error"
-                            )
-                            yield f"[Error]\n{error}\n"
+                        result_content = self._format_output(result, tool_type="code")
 
-                        # Add tool result to history (simplified for better learning)
-                        if (
-                            result["status"] == "success"
-                            and result.get("exit_code", 0) == 0
-                        ):
-                            output = result.get("stdout", "").strip()
-                            if output:
-                                result_content = f"SUCCESS\nOutput:\n{output}"
-                            else:
-                                result_content = (
-                                    "No output. You must use print() to see results."
-                                )
-                        else:
-                            error = result.get("stderr") or result.get(
-                                "error", "Unknown error"
-                            )
-                            result_content = f"ERROR\n{error}"
+                    elif tool_call.function.name == "execute_shell":
+                        command = args.get("command", "")
+                        yield f"\n[Executing shell]\n```bash\n{command}\n```\n"
+                        result = self._execute_shell(command)
+                        result_content = self._format_output(result, tool_type="shell")
 
-                        tool_result = {
+                    else:
+                        continue
+
+                    # Yield output to user
+                    for line in result_content.split("\n"):
+                        if line.strip():
+                            yield f"{line}\n"
+
+                    # Add to conversation history
+                    self.conversation_history.append(
+                        {
                             "role": "tool",
                             "tool_call_id": tool_call.id,
                             "content": result_content,
                         }
-                        self.conversation_history.append(tool_result)
+                    )
             else:
+                # No tool calls - agent finished
                 if message.content:
                     yield f"\n{message.content}\n"
                 break
@@ -231,6 +263,89 @@ Start by exploring what tools are available, then figure out how to access and a
                 "error": str(e),
                 "exit_code": 1,
             }
+
+    def _execute_shell(self, command: str) -> dict[str, Any]:
+        """Execute shell command using Ray.
+
+        Args:
+            command: Shell command to execute
+
+        Returns:
+            Execution result dictionary
+        """
+        try:
+            kwargs = {
+                "command": command,
+                "session_id": self.session_id,
+                "volumes": self.volumes,
+                "timeout": 300,
+            }
+
+            if self.image:
+                kwargs["image"] = self.image
+            elif self.dockerfile:
+                kwargs["dockerfile"] = self.dockerfile
+
+            result = ray.get(ray_execute_shell.remote(**kwargs))
+            return result
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "exit_code": 1,
+            }
+
+    def _format_output(self, result: dict[str, Any], tool_type: str = "code") -> str:
+        """Format execution result for display and context.
+
+        Args:
+            result: Execution result dict
+            tool_type: Type of tool ("code" or "shell")
+
+        Returns:
+            Formatted result string
+        """
+        if result["status"] == "success" and result.get("exit_code", 0) == 0:
+            output = result.get("stdout", "").strip()
+            if not output:
+                return (
+                    "SUCCESS - No output"
+                    if tool_type == "shell"
+                    else "No output. You must use print() to see results."
+                )
+
+            # Truncate large outputs
+            max_chars = 2000
+            max_lines = 50
+
+            if len(output) > max_chars or len(output.split("\n")) > max_lines:
+                lines = output.split("\n")
+                warning = (
+                    "[You printed raw dataset/large data. Only print summaries and answers!]"
+                    if tool_type == "code"
+                    else "[Output truncated]"
+                )
+                truncated = (
+                    "\n".join(lines[:10])
+                    + f"\n\n[... Output truncated - too large ...]\n{warning}\n\n"
+                    + "\n".join(lines[-10:])
+                )
+                status = (
+                    "ERROR: Output too large (dataset printed). Only print summaries, not raw data."
+                    if tool_type == "code"
+                    else f"SUCCESS (truncated)\nOutput:\n{truncated}"
+                )
+                return (
+                    status
+                    if tool_type == "code"
+                    else f"SUCCESS (truncated)\nOutput:\n{truncated}"
+                )
+
+            return f"SUCCESS\nOutput:\n{output}"
+        else:
+            error = result.get("stderr") or result.get("error", "Unknown error")
+            return f"ERROR\n{error}"
 
     def clear_history(self):
         """Clear conversation history (session variables persist in sandbox)."""

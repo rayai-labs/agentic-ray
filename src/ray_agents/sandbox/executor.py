@@ -192,6 +192,45 @@ class CodeInterpreterExecutor:
                 execution_id=execution_id,
             )
 
+    async def execute_shell(
+        self, command: str, timeout: int = DEFAULT_TIMEOUT
+    ) -> ExecutionResult | ExecutionError:
+        """
+        Execute shell command in the container.
+
+        Args:
+            command: Shell command to execute
+            timeout: Execution timeout in seconds
+
+        Returns:
+            Execution result with status, stdout, stderr, exit_code
+        """
+        self.execution_count += 1
+        execution_id = f"{self.session_id}_shell_{self.execution_count}"
+
+        logger.info(f"Shell execution {execution_id}: {command[:100]}")
+
+        try:
+            return await asyncio.wait_for(
+                self._execute_shell(command, execution_id), timeout=timeout
+            )
+        except TimeoutError:
+            logger.error(f"Shell execution {execution_id}: Timed out after {timeout}s")
+            return ExecutionError(
+                status="error",
+                error=f"Shell execution timed out after {timeout} seconds",
+                error_type="TimeoutError",
+                execution_id=execution_id,
+            )
+        except Exception as e:
+            logger.error(f"Shell execution {execution_id}: Failed - {e}", exc_info=True)
+            return ExecutionError(
+                status="error",
+                error=str(e),
+                error_type=type(e).__name__,
+                execution_id=execution_id,
+            )
+
     async def _execute_code(
         self, code: str, execution_id: str
     ) -> ExecutionResult | ExecutionError:
@@ -311,6 +350,58 @@ with open('{SESSION_STATE_PATH}', 'wb') as f:
 
         except Exception as e:
             logger.error(f"Execution {execution_id}: Failed - {e}", exc_info=True)
+            return ExecutionError(
+                status="error",
+                error=str(e),
+                error_type=type(e).__name__,
+                execution_id=execution_id,
+            )
+
+    async def _execute_shell(
+        self, command: str, execution_id: str
+    ) -> ExecutionResult | ExecutionError:
+        """Internal method to execute shell command"""
+        try:
+            # Ensure container is running
+            self._ensure_container()
+
+            # Execute shell command directly
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            container = self.container
+            if container is None:
+                raise RuntimeError("Container not initialized")
+
+            # Execute command in shell
+            exec_result = await loop.run_in_executor(
+                None,
+                lambda: container.exec_run(
+                    f"sh -c {repr(command)}",
+                    demux=True,
+                ),
+            )
+
+            # Parse output
+            stdout, stderr = self._parse_exec_output(exec_result.output)
+
+            logger.info(
+                f"Shell execution {execution_id}: {'success' if exec_result.exit_code == 0 else 'error'}"
+            )
+
+            return ExecutionResult(
+                status="success" if exec_result.exit_code == 0 else "error",
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=exec_result.exit_code,
+                execution_id=execution_id,
+            )
+
+        except Exception as e:
+            logger.error(f"Shell execution {execution_id}: Failed - {e}", exc_info=True)
             return ExecutionError(
                 status="error",
                 error=str(e),

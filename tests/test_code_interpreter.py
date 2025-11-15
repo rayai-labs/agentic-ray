@@ -6,14 +6,14 @@ from typing import cast
 import pytest
 import ray
 
-from ray_agents.code_interpreter import (
+from ray_agents.sandbox import (
     cleanup_session,
     execute_code,
     get_session_stats,
     install_package,
     upload_file,
 )
-from ray_agents.code_interpreter.types import ExecutionResult
+from ray_agents.sandbox.types import ExecutionResult
 
 
 @pytest.fixture(scope="module")
