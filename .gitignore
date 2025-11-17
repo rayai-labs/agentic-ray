@@ -35,6 +35,7 @@ htmlcov/
 # Development notes
 notes/
 docs/
+blog_draft*.md
 
 # claude
 devcontainer.json
