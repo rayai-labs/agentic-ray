@@ -1,24 +1,25 @@
-"""MCP Client for communicating with MCP servers via HTTP."""
+"""MCP Client for communicating with MCP servers via Unix socket."""
 
 import json
-import urllib.error
-import urllib.request
+import socket
 from typing import Any
 
 
 class MCPClient:
-    """Client for communicating with MCP servers via HTTP."""
+    """Client for communicating with MCP servers via Unix socket sidecar proxy."""
 
-    def __init__(self, http_endpoint: str):
+    def __init__(self, mcp_server_url: str, socket_path: str = "/tmp/mcp.sock"):
         """Initialize MCP client.
 
         Args:
-            http_endpoint: HTTP endpoint for MCP server
+            mcp_server_url: URL of the MCP server (e.g., 'http://localhost:8265/mcp')
+            socket_path: Path to Unix socket for sidecar proxy
         """
-        self.http_endpoint = http_endpoint
+        self.mcp_server_url = mcp_server_url
+        self.socket_path = socket_path
 
     def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Call a tool on the MCP server via HTTP.
+        """Call a tool on the MCP server via Unix socket.
 
         Args:
             tool_name: Name of the tool to call
@@ -31,63 +32,81 @@ class MCPClient:
             RuntimeError: If communication fails
         """
         request_data = {
+            "url": self.mcp_server_url,
             "tool": tool_name,
             "arguments": arguments,
         }
 
         try:
-            data = json.dumps(request_data).encode("utf-8")
-            req = urllib.request.Request(
-                f"{self.http_endpoint}/tools/call",
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
+            # Connect to Unix socket
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(self.socket_path)
 
-            with urllib.request.urlopen(req, timeout=30) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                return result
+            try:
+                # Send request (length-prefixed JSON)
+                request_bytes = json.dumps(request_data).encode("utf-8")
+                length_bytes = len(request_bytes).to_bytes(4, byteorder="big")
+                sock.sendall(length_bytes + request_bytes)
 
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8")
-            raise RuntimeError(f"HTTP error {e.code}: {error_body}") from e
+                # Receive response length
+                length_bytes = sock.recv(4)
+                if not length_bytes:
+                    raise RuntimeError("No response from MCP proxy")
+
+                response_length = int.from_bytes(length_bytes, byteorder="big")
+
+                # Receive response data
+                response_data = b""
+                while len(response_data) < response_length:
+                    chunk = sock.recv(min(4096, response_length - len(response_data)))
+                    if not chunk:
+                        break
+                    response_data += chunk
+
+                if len(response_data) != response_length:
+                    raise RuntimeError("Incomplete response from MCP proxy")
+
+                # Parse response
+                response = json.loads(response_data.decode("utf-8"))
+
+                # Check for errors
+                if "error" in response:
+                    raise RuntimeError(f"MCP proxy error: {response['error']}")
+
+                return response.get("result", response)
+
+            finally:
+                sock.close()
+
+        except OSError as e:
+            raise RuntimeError(
+                f"Failed to connect to MCP proxy at {self.socket_path}: {str(e)}"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to call MCP tool via HTTP: {str(e)}") from e
+            raise RuntimeError(f"Failed to call MCP tool: {str(e)}") from e
 
 
 _datasets_client: MCPClient | None = None
 
 
-def get_datasets_client(http_endpoint: str | None = None) -> MCPClient:
+def get_datasets_client(
+    mcp_server_url: str = "http://host.docker.internal:8265/mcp",
+    socket_path: str = "/tmp/mcp.sock",
+) -> MCPClient:
     """Get or create the datasets MCP client.
 
     Args:
-        http_endpoint: HTTP endpoint for MCP server (e.g., 'http://localhost:8265/mcp')
-                      If None, will try to detect Ray Serve endpoint
+        mcp_server_url: URL of the MCP server (default: 'http://localhost:8265/mcp')
+        socket_path: Path to Unix socket for sidecar proxy (default: '/tmp/mcp.sock')
 
     Returns:
         MCPClient instance for the datasets server
     """
     global _datasets_client
     if _datasets_client is None:
-        if http_endpoint is None:
-            import os
-
-            in_docker = os.path.exists("/.dockerenv")
-
-            if not in_docker and os.path.exists("/proc/1/cgroup"):
-                try:
-                    with open("/proc/1/cgroup") as f:
-                        in_docker = "docker" in f.read()
-                except Exception:
-                    pass
-
-            if in_docker:
-                http_endpoint = "http://host.docker.internal:8265/mcp"
-            else:
-                http_endpoint = "http://localhost:8265/mcp"
-
-        _datasets_client = MCPClient(http_endpoint=http_endpoint)
+        _datasets_client = MCPClient(
+            mcp_server_url=mcp_server_url, socket_path=socket_path
+        )
 
     return _datasets_client
 
