@@ -24,6 +24,8 @@ if src_path.exists() and str(src_path) not in sys.path:
 
 from ray_agents.sandbox import (
     execute_code as ray_execute_code,
+)
+from ray_agents.sandbox import (
     execute_shell as ray_execute_shell,
 )
 
