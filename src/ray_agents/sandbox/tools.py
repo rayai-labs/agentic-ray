@@ -14,8 +14,6 @@ from .types import (
     CleanupResult,
     ExecutionError,
     ExecutionResult,
-    InstallError,
-    InstallResult,
     SessionStats,
     UploadError,
     UploadResult,
@@ -33,6 +31,7 @@ def _get_or_create_executor(
     dockerfile: str | None = None,
     environment: dict[str, str] | None = None,
     volumes: dict[str, dict[str, str]] | None = None,
+    mcp_allowlist: list[str] | None = None,
 ) -> ray.actor.ActorHandle:
     """Get existing executor or create new one for session"""
     actor_name = f"code-executor-{session_id}"
@@ -55,6 +54,7 @@ def _get_or_create_executor(
             dockerfile=dockerfile,
             environment=environment,
             volumes=volumes,
+            mcp_allowlist=mcp_allowlist,
         )
         return cast(ray.actor.ActorHandle, executor)
 
@@ -67,10 +67,16 @@ def execute_code(
     dockerfile: str | None = None,
     environment: dict[str, str] | None = None,
     volumes: dict[str, dict[str, str]] | None = None,
+    mcp_allowlist: list[str] | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> ExecutionResult | ExecutionError:
     """
     Execute Python code in isolated Docker container.
+
+    IMPORTANT: Network access is DISABLED. The container has no internet access.
+    - All required packages must be pre-installed in the Docker image
+    - External data access is only possible through MCP servers
+    - Cannot make HTTP requests, pip install, or access external services
 
     Args:
         code: Python code to execute
@@ -80,6 +86,7 @@ def execute_code(
         environment: Environment variables for container
         volumes: Volume mounts for container. Format:
             {'/host/path': {'bind': '/container/path', 'mode': 'ro'}}
+        mcp_allowlist: List of allowed MCP server URLs (e.g., ['http://localhost:8265/mcp'])
         timeout: Execution timeout in seconds
 
     Returns:
@@ -110,7 +117,7 @@ def execute_code(
 
     # Get or create executor for session
     executor = _get_or_create_executor(
-        session_id, image, dockerfile, environment, volumes
+        session_id, image, dockerfile, environment, volumes, mcp_allowlist
     )
 
     # Execute code
@@ -130,10 +137,17 @@ def execute_shell(
     dockerfile: str | None = None,
     environment: dict[str, str] | None = None,
     volumes: dict[str, dict[str, str]] | None = None,
+    mcp_allowlist: list[str] | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> ExecutionResult | ExecutionError:
     """
     Execute shell command in isolated Docker container.
+
+    IMPORTANT: Network access is DISABLED. The container has no internet access.
+    - Cannot use pip install, apt-get, curl, wget, or other network tools
+    - All required packages must be pre-installed in the Docker image
+    - External data access is only possible through MCP servers
+    - Cannot access external services or download files from the internet
 
     Args:
         command: Shell command to execute
@@ -143,6 +157,7 @@ def execute_shell(
         environment: Environment variables for container
         volumes: Volume mounts for container. Format:
             {'/host/path': {'bind': '/container/path', 'mode': 'ro'}}
+        mcp_allowlist: List of allowed MCP server URLs (e.g., ['http://localhost:8265/mcp'])
         timeout: Execution timeout in seconds
 
     Returns:
@@ -172,59 +187,13 @@ def execute_shell(
 
     # Get or create executor for session
     executor = _get_or_create_executor(
-        session_id, image, dockerfile, environment, volumes
+        session_id, image, dockerfile, environment, volumes, mcp_allowlist
     )
 
     # Execute shell command
     logger.info(f"Executing shell command in session {session_id}: {command[:50]}...")
     result: ExecutionResult | ExecutionError = ray.get(
         executor.execute_shell.remote(command, timeout)
-    )
-
-    return result
-
-
-@ray.remote
-def install_package(
-    package: str,
-    session_id: str,
-    timeout: int = 300,
-) -> InstallResult | InstallError:
-    """
-    Install pip package in session container.
-
-    Args:
-        package: Package name (e.g., "numpy", "pandas==2.0.0")
-        session_id: Session identifier
-        timeout: Installation timeout in seconds (default: 300)
-
-    Returns:
-        Installation result
-
-    Example:
-        >>> ray.get(execute_code.remote("x = 1", session_id="my-session"))
-        >>> ray.get(install_package.remote("numpy", session_id="my-session"))
-        >>> result = ray.get(execute_code.remote(
-        ...     "import numpy; print(numpy.__version__)",
-        ...     session_id="my-session"
-        ... ))
-    """
-    logger.info(
-        f"install_package called with session_id: {session_id}, package: {package}"
-    )
-
-    try:
-        executor = ray.get_actor(
-            f"code-executor-{session_id}", namespace=ACTOR_NAMESPACE
-        )
-    except ValueError as err:
-        raise ValueError(
-            f"Session {session_id} not found. " "Execute code first to create session."
-        ) from err
-
-    logger.info(f"Installing package {package} in session {session_id}")
-    result: InstallResult | InstallError = ray.get(
-        executor.install_package.remote(package, timeout=timeout)
     )
 
     return result
