@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir \
     pandas \
     numpy \
     matplotlib \
-    sklearn
+    scikit-learn
 
 # Set working directory
 WORKDIR /workspace

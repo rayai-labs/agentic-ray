@@ -22,10 +22,8 @@ src_path = project_root / "src"
 if src_path.exists() and str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-from ray_agents.sandbox import (  # noqa: E402
-    execute_code as ray_execute_code,
-)
 from ray_agents.sandbox import (
+    execute_code as ray_execute_code,
     execute_shell as ray_execute_shell,
 )
 
@@ -55,13 +53,13 @@ class TokenEfficientAgent:
         "type": "function",
         "function": {
             "name": "execute_shell",
-            "description": "Execute shell command in the sandboxed environment. Use for: installing packages (pip install), file inspection (ls, head, wc), system commands.",
+            "description": "Execute shell command in the sandboxed environment. Use for: file inspection (ls, head, wc), system commands. NOTE: No network access - packages must be pre-installed in Docker image.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "Shell command to execute (e.g., 'pip install numpy', 'ls -lh /mnt/datasets')",
+                        "description": "Shell command to execute (e.g., 'ls -lh /mnt', 'pip list | grep pandas')",
                     }
                 },
                 "required": ["command"],
@@ -74,6 +72,7 @@ class TokenEfficientAgent:
         session_id: str,
         datasets_path: str,
         servers_path: str,
+        mcp_server_url: str = "http://localhost:8000/mcp",
         dockerfile_path: str | None = None,
         image: str | None = None,
         model: str = "gpt-4o",
@@ -85,6 +84,7 @@ class TokenEfficientAgent:
             session_id: Unique identifier for this analysis session
             datasets_path: Path to datasets directory on host
             servers_path: Path to MCP servers directory on host
+            mcp_server_url: URL of the MCP server (default: 'http://localhost:8265/mcp')
             dockerfile_path: Optional path to custom Dockerfile (will build image)
             image: Optional pre-built Docker image name (e.g., 'token-efficient-agent')
             model: OpenAI model to use
@@ -102,6 +102,9 @@ class TokenEfficientAgent:
             self.servers_path: {"bind": "/mnt/servers", "mode": "ro"},
         }
 
+        # MCP allowlist for sidecar proxy
+        self.mcp_allowlist = [mcp_server_url]
+
         self.image = image
         self.dockerfile = None
         if not image and dockerfile_path and os.path.exists(dockerfile_path):
@@ -113,10 +116,11 @@ class TokenEfficientAgent:
         self.system_prompt = """Data analysis assistant with Python code execution and shell access.
 
 Environment: Python 3.12 (pandas, numpy, matplotlib), headless - use print()
+IMPORTANT: No network access - all packages pre-installed
 
 Tools Available:
 - execute_code: Run Python code (variables persist across calls)
-- execute_shell: Run shell commands (for pip install, grep, wc, etc.)
+- execute_shell: Run shell commands (for ls, wc, grep, etc.)
 
 CRITICAL - Dataset Access:
 - Datasets are NOT directly mounted - DO NOT use /mnt/datasets
@@ -147,8 +151,8 @@ CRITICAL - Imports:
 - Import pattern: sys.path.append('/mnt'); from servers.CLIENT import tool
 
 Shell Usage:
-- Install packages: execute_shell("pip install scikit-learn")
-- System commands: execute_shell("pip list | grep pandas")
+- Check installed packages: execute_shell("pip list | grep pandas")
+- System commands: execute_shell("ls -lh /mnt/servers")
 
 Work step-by-step. Variables persist, imports don't."""
 
@@ -246,6 +250,7 @@ Work step-by-step. Variables persist, imports don't."""
                 "code": code,
                 "session_id": self.session_id,
                 "volumes": self.volumes,
+                "mcp_allowlist": self.mcp_allowlist,
                 "timeout": 300,
             }
 
@@ -278,6 +283,7 @@ Work step-by-step. Variables persist, imports don't."""
                 "command": command,
                 "session_id": self.session_id,
                 "volumes": self.volumes,
+                "mcp_allowlist": self.mcp_allowlist,
                 "timeout": 300,
             }
 

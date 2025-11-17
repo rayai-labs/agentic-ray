@@ -88,10 +88,12 @@ def main():
     print()
 
     print("Creating agent...")
+    # Use host.docker.internal for Docker Desktop on macOS
     agent = TokenEfficientAgent(
         session_id="cli-session",
         datasets_path=str(datasets_path),
         servers_path=str(servers_path),
+        mcp_server_url="http://host.docker.internal:8265/mcp",
         dockerfile_path=str(dockerfile_path) if dockerfile_path.exists() else None,
         image=args.image,
     )
