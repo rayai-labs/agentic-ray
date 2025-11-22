@@ -1,11 +1,11 @@
-"""Base classes for Ray Agents framework."""
+"""Base classes for Agentic-Ray framework."""
 
 from abc import ABC, abstractmethod
 from typing import Any
 
 
 class RayAgent(ABC):
-    """Abstract base class for all Ray Agents.
+    """Abstract base class for all Agentic-Ray agents.
 
     All agents must inherit from this class and implement the required methods.
     This ensures a consistent interface across all agents in the framework.
@@ -47,7 +47,7 @@ class RayAgent(ABC):
         return {
             "name": self.__class__.__name__,
             "version": "1.0.0",
-            "framework": "ray-agents",
+            "framework": "agentic-ray",
         }
 
     def validate_input(self, data: dict[str, Any]) -> bool:

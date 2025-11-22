@@ -80,7 +80,7 @@ my-project/
 Each agent must inherit from `RayAgent` and implement the `run()` method:
 
 ```python
-from ray_agents import RayAgent
+from agentic_ray import RayAgent
 
 class ChatbotAgent(RayAgent):
     def __init__(self):

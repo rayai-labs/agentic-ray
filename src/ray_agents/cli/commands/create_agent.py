@@ -49,7 +49,7 @@ def _create_agent_files(agent_dir: Path, agent_name: str):
 
     agent_content = f'''"""Agent implementation for {agent_name}."""
 
-from ray_agents import RayAgent
+from agentic_ray import RayAgent
 
 
 class {agent_name.title()}Agent(RayAgent):

@@ -1,4 +1,4 @@
-"""Ray Agents - [Experimental] API for running LLM Agents on Ray."""
+"""Agentic-Ray - [Experimental] API for running LLM Agents on Ray."""
 
 from ray_agents.base import RayAgent
 from ray_agents.session import AgentSession

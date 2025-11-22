@@ -1,2 +1,2 @@
 python-dotenv
-ray-agents
+agentic-ray
