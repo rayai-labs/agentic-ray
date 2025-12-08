@@ -4,14 +4,12 @@ from collections.abc import Callable
 from typing import Any
 
 import ray
-from ray.util.annotations import DeveloperAPI
 
 from ray_agents.adapters.abc import AgentAdapter
 
 logger = logging.getLogger(__name__)
 
 
-@DeveloperAPI
 class LangGraphAdapter(AgentAdapter):
     """
     Adapter for LangGraph agents with Ray distributed tool execution.

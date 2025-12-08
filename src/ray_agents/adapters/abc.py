@@ -1,10 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ray.util.annotations import DeveloperAPI
 
-
-@DeveloperAPI
 class AgentAdapter(ABC):
     """
     Base adapter for agent frameworks.

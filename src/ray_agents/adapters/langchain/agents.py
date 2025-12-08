@@ -6,14 +6,12 @@ from collections.abc import Callable
 from typing import Any
 
 import ray
-from ray.util.annotations import DeveloperAPI
 
 from ray_agents.adapters.abc import AgentAdapter
 
 logger = logging.getLogger(__name__)
 
 
-@DeveloperAPI
 class LangChainAdapter(AgentAdapter):
     """
     Adapter for LangChain agents with Ray distributed tool execution.
@@ -56,8 +54,6 @@ class LangChainAdapter(AgentAdapter):
         ... ))
 
     Works with any LangChain LLM provider (ChatOpenAI, ChatAnthropic, etc.).
-
-    **DeveloperAPI:** This API may change across minor Ray releases.
     """
 
     def __init__(
@@ -83,11 +79,6 @@ class LangChainAdapter(AgentAdapter):
         self._agent: Any | None = None
         self._cached_tool_signature: tuple | None = None
 
-        logger.info(
-            f"Initialized LangChainAdapter: llm={type(llm).__name__}, "
-            f"system_prompt={system_prompt[:50] if system_prompt else 'default'}..."
-        )
-
     async def run(
         self, message: str, messages: list[dict], tools: list[Any]
     ) -> dict[str, Any]:
@@ -109,10 +100,6 @@ class LangChainAdapter(AgentAdapter):
         Returns:
             Response dict with 'content' key and metadata
         """
-        logger.debug(
-            f"LangChain adapter processing message with {len(tools)} available tools"
-        )
-
         try:
             langchain_tools = self._wrap_ray_tools_for_langchain(tools)
             response_text = await self._execute_agent(
@@ -136,8 +123,8 @@ class LangChainAdapter(AgentAdapter):
         This is the key integration point: when LangChain calls these tools,
         they execute as Ray tasks (distributed across cluster).
 
-        Note: Tools execute sequentially. LangChain's create_agent does not
-        support async/parallel tool calls.
+        Note: create_agent() uses LangGraph under the hood, which supports
+        parallel tool execution when the agent decides to call multiple tools.
 
         Args:
             ray_tools: List of Ray remote functions
@@ -150,9 +137,6 @@ class LangChainAdapter(AgentAdapter):
         for ray_tool in ray_tools:
             if hasattr(ray_tool, "_remote_func") and hasattr(ray_tool, "args_schema"):
                 wrapped_tools.append(ray_tool)
-                logger.debug(
-                    f"Using from_langchain_tool wrapper directly: {ray_tool.__name__}"
-                )
                 continue
             elif hasattr(ray_tool, "remote"):
                 remote_func = ray_tool
@@ -175,11 +159,6 @@ class LangChainAdapter(AgentAdapter):
 
                 @functools.wraps(original_func)
                 def sync_wrapper(*args, **kwargs):
-                    logger.info(
-                        f"Executing {original_func.__name__}: "
-                        f"args={args}, kwargs={kwargs}"
-                    )
-
                     object_ref = tool.remote(*args, **kwargs)
                     result = ray.get(object_ref)
 
@@ -190,16 +169,12 @@ class LangChainAdapter(AgentAdapter):
                         if "result" in result:
                             result = result["result"]
 
-                    logger.info(
-                        f"Completed {original_func.__name__}: {result[:200] if isinstance(result, str) else result}"
-                    )
                     return result
 
                 return sync_wrapper
 
             wrapped_tools.append(make_wrapper(remote_func, ray_tool))
 
-        logger.debug(f"Wrapped {len(wrapped_tools)} Ray tools for LangChain")
         return wrapped_tools
 
     def _get_or_create_agent(self, lc_tools: list[Any]) -> Any:
@@ -218,16 +193,10 @@ class LangChainAdapter(AgentAdapter):
         tool_signature = tuple(sorted(tool.name for tool in lc_tools))
 
         if self._agent is None or self._cached_tool_signature != tool_signature:
-            logger.info(
-                f"Creating new agent (tools changed: {self._cached_tool_signature} -> {tool_signature})"
-            )
             from langchain.agents import create_agent
 
             self._agent = create_agent(self.llm, tools=lc_tools)
             self._cached_tool_signature = tool_signature
-            logger.info("LangChain agent created successfully")
-        else:
-            logger.debug("Reusing cached agent (tools unchanged)")
 
         return self._agent
 
@@ -288,10 +257,6 @@ class LangChainAdapter(AgentAdapter):
                         tool_kwargs["args_schema"] = wrapped_tool.args_schema
 
                     structured_tool = StructuredTool.from_function(**tool_kwargs)
-                    logger.info(
-                        f"Created tool: {structured_tool.name} - "
-                        f"{structured_tool.description[:80]}..."
-                    )
                     lc_tools.append(structured_tool)
                 except Exception as e:
                     logger.error(
@@ -302,19 +267,15 @@ class LangChainAdapter(AgentAdapter):
             if not lc_tools:
                 raise ValueError("No tools could be created")
 
-            logger.info(f"Created {len(lc_tools)} LangChain tools for agent")
-
             agent = self._get_or_create_agent(lc_tools)
 
             try:
                 result = await agent.ainvoke({"messages": conversation_history})
 
-                logger.info(
-                    f"Agent execution complete. Result has {len(result['messages'])} messages"
-                )
-
                 final_message = result["messages"][-1]
-                return str(final_message.content)
+                response_content = str(final_message.content)
+
+                return response_content
 
             except Exception as e:
                 logger.error(f"Error during agent execution: {e}", exc_info=True)
