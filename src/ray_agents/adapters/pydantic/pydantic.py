@@ -15,44 +15,9 @@ class PydanticAIAdapter(AgentAdapter):
     """
     Adapter for Pydantic AI agents with Ray distributed tool execution.
 
-    This adapter wraps Pydantic AI's agent execution while executing tools as
-    Ray tasks. Pydantic AI maintains full control over the agent flow; Ray
-    provides distributed execution.
-
-    When Pydantic AI calls a tool, it's actually executing:
-        result = ray.get(tool.remote(**args))
-
-    This means tools automatically run on cluster nodes with appropriate resources.
-
-    Example:
-        >>> from pydantic_ai import Agent
-        >>> from ray_agents.adapters.pydantic import PydanticAIAdapter
-        >>> from ray_agents import AgentSession
-        >>> import ray
-        >>>
-        >>> # Define tools with resource requirements
-        >>> @ray.remote(num_gpus=1)
-        >>> def tool_a(param: str):
-        ...     '''First tool with specific resource needs'''
-        ...     return {"output": "result_a"}
-        >>>
-        >>> @ray.remote(num_cpus=8, memory=4 * 1024**3)
-        >>> def tool_b(param: dict):
-        ...     '''Second tool with different resource needs'''
-        ...     return {"output": "result_b"}
-        >>>
-        >>> # Create Pydantic AI agent
-        >>> pydantic_agent = Agent('openai:gpt-4o-mini')
-        >>>
-        >>> # Create adapter
-        >>> adapter = PydanticAIAdapter(agent=pydantic_agent)
-        >>>
-        >>> # Use with AgentSession for stateful conversations
-        >>> session = AgentSession.remote("user_id", adapter=adapter)
-        >>> result = ray.get(session.run.remote(
-        ...     "Use the available tools to help me",
-        ...     tools=[tool_a, tool_b]
-        ... ))
+    Wraps Pydantic AI's agent execution while executing tools as Ray tasks.
+    Pydantic AI maintains full control over the agent flow; Ray provides
+    distributed execution.
     """
 
     def __init__(
@@ -64,12 +29,6 @@ class PydanticAIAdapter(AgentAdapter):
 
         Args:
             agent: Pre-configured Pydantic AI Agent instance
-                   User has full control over model, dependencies, output type, etc.
-
-        Example:
-            >>> from pydantic_ai import Agent
-            >>> agent = Agent('openai:gpt-4o-mini')
-            >>> adapter = PydanticAIAdapter(agent=agent)
         """
         self.agent = agent
 
@@ -78,13 +37,6 @@ class PydanticAIAdapter(AgentAdapter):
     ) -> dict[str, Any]:
         """
         Execute Pydantic AI agent with Ray distributed tools.
-
-        Flow:
-        1. Wrap Ray remote functions → Pydantic AI compatible callables
-        2. Register tools with Pydantic AI agent
-        3. Agent executes its loop (decides which tools to call)
-        4. When tool is called, Ray executes it distributed
-        5. Pydantic AI generates final response
 
         Args:
             message: Current user message

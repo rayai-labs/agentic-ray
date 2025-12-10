@@ -16,44 +16,9 @@ class LangChainAdapter(AgentAdapter):
     """
     Adapter for LangChain agents with Ray distributed tool execution.
 
-    This adapter wraps LangChain's native agent execution (ReAct pattern, tool
-    calling) while executing tools as Ray tasks. LangChain maintains full control
-    over the agent flow; Ray provides distributed execution.
-
-    When LangChain calls a tool, it's actually executing:
-        result = ray.get(tool.remote(**args))
-
-    This means tools automatically run on cluster nodes with appropriate resources.
-
-    Example:
-        >>> from ray_agents.adapters.langchain import LangChainAdapter
-        >>> from langchain_openai import ChatOpenAI
-        >>> import ray
-        >>>
-        >>> # Define tools with resource requirements
-        >>> @ray.remote(num_gpus=1)
-        >>> def tool_a(param: str):
-        ...     '''First tool with specific resource needs'''
-        ...     return {"output": "result_a"}
-        >>>
-        >>> @ray.remote(num_cpus=8, memory=4 * 1024**3)
-        >>> def tool_b(param: dict):
-        ...     '''Second tool with different resource needs'''
-        ...     return {"output": "result_b"}
-        >>>
-        >>> # Create adapter with any LangChain LLM
-        >>> llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
-        >>> adapter = LangChainAdapter(llm=llm)
-        >>>
-        >>> # Use with AgentSession for stateful conversations
-        >>> from ray_agents import AgentSession
-        >>> session = AgentSession.remote("user_id", adapter=adapter)
-        >>> result = ray.get(session.run.remote(
-        ...     "Use the available tools to help me",
-        ...     tools=[tool_a, tool_b]
-        ... ))
-
-    Works with any LangChain LLM provider (ChatOpenAI, ChatAnthropic, etc.).
+    Wraps LangChain's native agent execution while executing tools as Ray tasks.
+    LangChain maintains full control over the agent flow; Ray provides distributed
+    execution. Works with any LangChain LLM provider (ChatOpenAI, ChatAnthropic, etc.).
     """
 
     def __init__(
@@ -66,13 +31,7 @@ class LangChainAdapter(AgentAdapter):
 
         Args:
             llm: Pre-configured LangChain LLM (ChatOpenAI, ChatAnthropic, etc.)
-                 User has full control over model, temperature, API keys, etc.
             system_prompt: Optional system prompt for the agent
-
-        Example:
-            >>> from langchain_openai import ChatOpenAI
-            >>> llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
-            >>> adapter = LangChainAdapter(llm=llm)
         """
         self.llm = llm
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
@@ -84,13 +43,6 @@ class LangChainAdapter(AgentAdapter):
     ) -> dict[str, Any]:
         """
         Execute LangChain agent with Ray distributed tools.
-
-        Flow:
-        1. Convert Ray remote functions → LangChain Tool format
-        2. Create LangChain agent with create_agent()
-        3. Agent executes its ReAct loop (decides which tools to call)
-        4. When tool is called, Ray executes it distributed
-        5. LangChain generates final response
 
         Args:
             message: Current user message
