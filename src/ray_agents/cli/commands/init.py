@@ -1,6 +1,8 @@
 """Initialize new projects with templates."""
 
 import shutil
+import subprocess
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -43,13 +45,44 @@ def init(project_name: str, project_type: str):
 
             try:
                 shutil.copytree(template_dir, target_dir)
+
+                pyproject_file = target_dir / "pyproject.toml"
+                if pyproject_file.exists():
+                    content = pyproject_file.read_text()
+                    content = content.replace("{{PROJECT_NAME}}", project_name)
+                    pyproject_file.write_text(content)
+
                 click.echo(f"Created new {project_type} project: {project_name}")
                 click.echo(f"Project location: {target_dir}")
+
+                if pyproject_file.exists():
+                    click.echo("\nInstalling project in editable mode...")
+                    try:
+                        subprocess.run(
+                            [
+                                sys.executable,
+                                "-m",
+                                "pip",
+                                "install",
+                                "-e",
+                                str(target_dir),
+                            ],
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        )
+                        click.echo("Project installed successfully")
+                    except subprocess.CalledProcessError as e:
+                        click.echo(f"Warning: Failed to install project: {e.stderr}")
+                        click.echo(
+                            f"You can install manually with: pip install -e {project_name}/"
+                        )
+
                 click.echo("\nNext steps:")
                 click.echo(f"  cd {project_name}")
                 click.echo("  # Edit .env file with your API keys")
                 click.echo("  # Create your first agent: rayai create-agent <name>")
-                click.echo("  # Deploy agents: rayai serve")
+                click.echo("  # Run agents: rayai serve")
 
             except Exception as e:
                 click.echo(f"Error: Failed to create project: {e}")
