@@ -10,6 +10,7 @@ from typing import Any
 
 import click
 
+from ray_agents.base import RayAgent
 from ray_agents.deployment import (
     create_agent_deployment,
 )
@@ -201,7 +202,10 @@ def _discover_agents(project_dir: Path) -> dict[str, Any]:
 
 
 def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
-    """Load Agent class from a Python file."""
+    """Load Agent class from a Python file.
+
+    Discovers classes that inherit from RayAgent and have a run() method.
+    """
     try:
         project_dir = file_path.parent.parent
         if str(project_dir) not in sys.path:
@@ -215,29 +219,30 @@ def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
         spec.loader.exec_module(module)
 
         for _name, obj in inspect.getmembers(module):
-            is_regular_class = (
-                inspect.isclass(obj) and obj.__module__ == module.__name__
-            )
+            # Check if it's a Ray actor (decorated with @ray.remote)
             is_ray_actor = hasattr(obj, "__ray_metadata__") and hasattr(obj, "remote")
 
             if is_ray_actor:
                 unwrapped_class = obj.__ray_metadata__.modified_class
                 is_defined_here = unwrapped_class.__module__ == module.__name__
+                is_rayagent = issubclass(unwrapped_class, RayAgent)
             else:
-                is_defined_here = True
+                is_defined_here = (
+                    obj.__module__ == module.__name__ if inspect.isclass(obj) else False
+                )
+                is_rayagent = inspect.isclass(obj) and issubclass(obj, RayAgent)
 
-            if (is_regular_class or (is_ray_actor and is_defined_here)) and hasattr(
-                obj, "run"
-            ):
-                if is_ray_actor and is_defined_here:
+            if is_rayagent and is_defined_here and obj is not RayAgent:
+                if is_ray_actor:
                     unwrapped_class._ray_remote_options = obj._default_options
                     return unwrapped_class
                 return obj
 
-        if hasattr(module, "Agent"):
-            return module.Agent
-
-        click.echo(f"No agent class found in {file_path}")
+        click.echo(f"No RayAgent subclass found in {file_path}")
+        click.echo("  Agent classes must inherit from RayAgent:")
+        click.echo("    from ray_agents import RayAgent")
+        click.echo("    class MyAgent(RayAgent):")
+        click.echo("        def run(self, data: dict) -> dict: ...")
         return None
 
     except Exception as e:
