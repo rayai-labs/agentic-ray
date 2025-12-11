@@ -10,13 +10,11 @@ from typing import Any
 
 import click
 
-from ray_agents.base import RayAgent
 from ray_agents.deployment import (
     create_agent_deployment,
 )
 from ray_agents.resource_loader import (
     _parse_memory,
-    get_ray_native_resources,
     merge_resource_configs,
 )
 
@@ -204,7 +202,7 @@ def _discover_agents(project_dir: Path) -> dict[str, Any]:
 def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
     """Load Agent class from a Python file.
 
-    Discovers classes that inherit from RayAgent and have a run() method.
+    Discovers classes decorated with @agent.
     """
     try:
         project_dir = file_path.parent.parent
@@ -219,29 +217,21 @@ def _load_agent_from_file(file_path: Path, module_name: str) -> Any | None:
         spec.loader.exec_module(module)
 
         for _name, obj in inspect.getmembers(module):
-            # Check if it's a Ray actor (decorated with @ray.remote)
-            is_ray_actor = hasattr(obj, "__ray_metadata__") and hasattr(obj, "remote")
+            # Check if class is decorated with @agent
+            is_agent = getattr(obj, "_is_rayai_agent", False)
 
-            if is_ray_actor:
-                unwrapped_class = obj.__ray_metadata__.modified_class
-                is_defined_here = unwrapped_class.__module__ == module.__name__
-                is_rayagent = issubclass(unwrapped_class, RayAgent)
-            else:
+            if is_agent:
                 is_defined_here = (
                     obj.__module__ == module.__name__ if inspect.isclass(obj) else False
                 )
-                is_rayagent = inspect.isclass(obj) and issubclass(obj, RayAgent)
+                if is_defined_here:
+                    return obj
 
-            if is_rayagent and is_defined_here and obj is not RayAgent:
-                if is_ray_actor:
-                    unwrapped_class._ray_remote_options = obj._default_options
-                    return unwrapped_class
-                return obj
-
-        click.echo(f"No RayAgent subclass found in {file_path}")
-        click.echo("  Agent classes must inherit from RayAgent:")
-        click.echo("    from ray_agents import RayAgent")
-        click.echo("    class MyAgent(RayAgent):")
+        click.echo(f"No @agent decorated class found in {file_path}")
+        click.echo("  Agent classes must be decorated with @agent:")
+        click.echo("    from ray_agents import agent")
+        click.echo("    @agent()")
+        click.echo("    class MyAgent:")
         click.echo("        def run(self, data: dict) -> dict: ...")
         return None
 
@@ -271,23 +261,24 @@ def _merge_all_resource_sources(
     cli_resources: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """
-    Merge resources from all sources with precedence: CLI > Ray native > defaults.
+    Merge resources from all sources with precedence: CLI > @agent decorator > defaults.
 
     Args:
-        agent_class: Agent class (may have @ray.remote decorator)
+        agent_class: Agent class (decorated with @agent)
         agent_name: Name of the agent
         cli_resources: Parsed CLI resource flags
 
     Returns:
         Final merged resource configuration
     """
-    ray_native = get_ray_native_resources(agent_class)
+    # Get resources from @agent decorator metadata
+    agent_metadata = getattr(agent_class, "_agent_metadata", {})
     cli_flags = cli_resources.get(agent_name, {})
-    merged = merge_resource_configs(DEFAULT_RESOURCES, ray_native, cli_flags)
+    merged = merge_resource_configs(DEFAULT_RESOURCES, agent_metadata, cli_flags)
 
     sources = []
-    if ray_native:
-        sources.append("Ray native decorator")
+    if agent_metadata:
+        sources.append("@agent decorator")
     if cli_flags:
         sources.append(f"CLI flags {list(cli_flags.keys())}")
 
