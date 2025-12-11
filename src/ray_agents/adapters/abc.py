@@ -122,12 +122,17 @@ class AgentAdapter(ABC):
         Execute agent reasoning loop.
 
         Args:
-            message: Current user message
-            messages: Full conversation history (list of dicts with 'role' and 'content')
+            message: Current user message to process
+            messages: Conversation history EXCLUDING current message
+                      (list of dicts with 'role' and 'content')
             tools: List of Ray remote functions available for use
 
         Returns:
             Response dictionary with at least a 'content' key containing the
             agent's response. May include additional metadata.
+
+        Note:
+            The caller should add the current message and response to history
+            AFTER this method returns, not before calling it.
         """
         pass

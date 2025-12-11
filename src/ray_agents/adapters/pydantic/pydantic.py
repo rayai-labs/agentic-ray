@@ -89,7 +89,7 @@ class PydanticAIAdapter(AgentAdapter):
                 ) from e
 
             message_history: list[ModelMessage] = []
-            for msg in messages[:-1]:
+            for msg in messages:
                 if msg["role"] == "user":
                     message_history.append(
                         ModelRequest(parts=[UserPromptPart(content=msg["content"])])
