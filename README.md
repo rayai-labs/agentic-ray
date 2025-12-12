@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://github.com/rayai-labs/agentic-ray">
+<a href="https://rayai.com">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-color.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/logo-color.svg">
@@ -17,9 +17,9 @@
 <!-- [![Build Status](https://img.shields.io/github/actions/workflow/status/rayai-labs/agentic-ray/ci.yml)](https://github.com/rayai-labs/agentic-ray/actions) -->
 <!-- [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/YOUR_INVITE) -->
 
-</div>
+Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with [Ray](https://github.com/ray-project/ray).
 
-<p align="center">Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with <a href="https://github.com/ray-project/ray">Ray</a>.</p>
+</div>
 
 ## Requirements
 
