@@ -1,0 +1,1 @@
+Provides shared helper functions such as configuration utilities, logging helpers, and environment-related tools.

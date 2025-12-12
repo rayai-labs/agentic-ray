@@ -1,0 +1,1 @@
+Agentic Ray provides a framework for building agentic workloads on Ray. It includes modules for agents, pipelines, prompts, utilities, tools, and runnable examples. Use this file as high-level context for the overall purpose and structure of the repository.

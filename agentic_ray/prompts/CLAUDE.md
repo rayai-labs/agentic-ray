@@ -1,0 +1,1 @@
+Contains LLM prompt templates used by agents and pipelines to define behavioral instructions.
