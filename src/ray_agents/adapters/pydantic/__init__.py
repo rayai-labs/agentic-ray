@@ -1,6 +1,5 @@
 """Pydantic AI tools for Ray distributed execution."""
 
-# ToolAdapter from ray_agents.adapters handles Pydantic tool wrapping
-# No Pydantic-specific exports needed
+from ray_agents.adapters.pydantic.tools import from_pydantic_tool
 
-__all__: list[str] = []
+__all__ = ["from_pydantic_tool"]
