@@ -1,0 +1,108 @@
+---
+title: "Quickstart"
+description: "Get your first distributed agent running in minutes"
+---
+
+<Info>
+  **Prerequisites**:
+  - Python 3.12 or higher
+  - Docker (optional, for code sandbox features)
+</Info>
+
+## Get started in four steps
+
+<Steps>
+<Step title="Install RayAI">
+
+```bash
+pip install rayai
+```
+
+For code interpreter support:
+```bash
+pip install rayai[code-interpreter]
+```
+
+</Step>
+
+<Step title="Create a project">
+
+```bash
+rayai init my_project
+cd my_project
+```
+
+This generates a project structure with:
+- `agents/` - Directory for your agent code
+- `pyproject.toml` - Project dependencies
+- `.env` - Environment variables (API keys, etc.)
+
+</Step>
+
+<Step title="Create an agent">
+
+```bash
+rayai create-agent my_agent --framework langchain
+```
+
+Available frameworks: `langchain`, `pydantic` (more coming soon)
+
+See the [framework guides](/frameworks/langchain) for framework-specific implementations.
+
+This creates `agents/my_agent/agent.py` with a template you can customize.
+
+</Step>
+
+<Step title="Serve and test">
+
+Start the server:
+```bash
+rayai serve
+```
+
+Test your agent:
+```bash
+curl -X POST http://localhost:8000/agents/my_agent/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "messages": [{"role": "user", "content": "Hello!"}]
+    }
+  }'
+```
+
+</Step>
+</Steps>
+
+## Next steps
+
+<Columns cols={2}>
+  <Card
+    title="Pure Python"
+    icon="python"
+    href="/frameworks/pure-python"
+  >
+    Build agents from scratch with full control
+  </Card>
+  <Card
+    title="LangChain"
+    icon="link"
+    href="/frameworks/langchain"
+  >
+    Use LangChain and LangGraph with distributed tools
+  </Card>
+  <Card
+    title="Pydantic AI"
+    icon="cube"
+    href="/frameworks/pydantic"
+  >
+    Type-safe agents with Pydantic AI
+  </Card>
+  <Card
+    title="Code Sandboxes"
+    icon="code"
+    href="/tools/native/execute-code"
+  >
+    Run AI-generated code in isolated environments
+  </Card>
+</Columns>

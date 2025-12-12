@@ -1,0 +1,67 @@
+---
+title: "Pydantic AI"
+description: "Build type-safe agents with Pydantic AI and distributed Ray tools"
+---
+
+## When to use Pydantic AI
+
+- You want type-safe agent development
+- You prefer Pydantic's validation and schema generation
+- You want a simpler API than LangChain
+- You need structured outputs from your agents
+
+## Create an agent
+
+```bash
+rayai create-agent my_agent --framework pydantic
+```
+
+## Run Pydantic AI tools on Ray
+
+Wrap a Pydantic AI `Tool` to execute on Ray workers:
+
+```python
+from pydantic_ai import Agent, Tool
+from ray_agents.adapters import from_pydantic_tool
+
+# Existing Pydantic AI Tool
+my_tool = Tool(some_function, name="my_tool")
+
+# Wrap for Ray execution
+ray_tool = from_pydantic_tool(my_tool, num_cpus=2)
+
+# Use directly with Pydantic AI agent
+agent = Agent("openai:gpt-4o-mini", tools=[ray_tool])
+```
+
+## Use Ray tools with Pydantic AI
+
+Wrap Ray tools for use with Pydantic AI agents:
+
+```python
+from pydantic_ai import Agent
+from ray_agents import tool
+from ray_agents.adapters import RayToolWrapper, AgentFramework
+
+@tool(desc="Search the web", num_cpus=1)
+def search_web(query: str) -> str:
+    return f"Results for: {query}"
+
+# Wrap for Pydantic AI
+wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
+pydantic_tools = wrapper.wrap_tools([search_web])
+
+# Use with Pydantic AI agent
+agent = Agent("openai:gpt-4o-mini", tools=pydantic_tools)
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Pure Python" icon="python" href="/frameworks/pure-python">
+    Build agents from scratch with full control
+  </Card>
+  <Card title="LangChain" icon="link" href="/frameworks/langchain">
+    Use LangChain and LangGraph with distributed tools
+  </Card>
+</CardGroup>

@@ -1,0 +1,70 @@
+---
+title: "Pure Python"
+description: "Build distributed agents from scratch with full control over execution"
+---
+
+## When to use Pure Python
+
+- You want full control over the agent loop
+- You don't need LLM framework integrations
+- You're building custom orchestration logic
+- You want minimal dependencies
+
+## Create an agent
+
+```bash
+rayai create-agent my_agent --framework python
+```
+
+## The `@tool` decorator
+
+Define tools that automatically execute on Ray workers:
+
+```python
+from ray_agents import tool
+
+@tool(desc="Search the web", num_cpus=1, memory="512MB")
+def search_web(query: str) -> str:
+    return f"Results for: {query}"
+
+# Call directly - Ray execution is automatic
+result = search_web(query="Python tutorials")
+```
+
+## The `@agent` decorator
+
+Mark a class as a deployable agent:
+
+```python
+from ray_agents import agent
+
+@agent(num_cpus=2, memory="4GB", num_replicas=2)
+class MyAgent:
+    def run(self, data: dict) -> dict:
+        return {"response": "Hello!"}
+```
+
+## Parallel tool execution
+
+Run multiple tools simultaneously:
+
+```python
+from ray_agents import execute_tools
+
+results = execute_tools([
+    (search_web, {"query": "Python tutorials"}),
+    (fetch_data, {"url": "https://api.example.com"}),
+    (analyze_text, {"text": "Some content"}),
+], parallel=True)
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="LangChain Integration" icon="link" href="/frameworks/langchain">
+    Use LangChain and LangGraph with distributed tools
+  </Card>
+  <Card title="Pydantic AI" icon="cube" href="/frameworks/pydantic">
+    Type-safe agents with Pydantic AI
+  </Card>
+</CardGroup>
