@@ -1,0 +1,1 @@
+Provides foundational runtime components: configuration, execution flow, event modeling, and orchestration utilities.
