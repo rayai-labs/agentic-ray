@@ -22,27 +22,38 @@ The CLI is the primary user-facing tool for interacting with the Agentic Ray run
 - CLI uses Click framework for command-line parsing
 - Entry point is `rayai` (defined in `pyproject.toml`)
 - Commands are modular and live in `commands/` subdirectory
-- Templates use Jinja2-style templating for code generation
-- `serve` command creates Ray Serve deployments from agent classes
+- Templates are copied from `templates/agent/` directory (not Jinja2, simple file copy with string replacement)
+- `serve` command discovers agents by scanning `agents/` directory for `@agent` decorated classes
+- Agent discovery looks for `agents/<name>/agent.py` files with classes decorated with `@agent`
+- `create_agent` generates framework-specific templates (python, langchain, pydantic)
 - Commands should be self-contained and handle errors gracefully
 
 ## Command Overview
 
 ### `rayai init <project_name>`
-Initializes a new agent project with boilerplate structure.
+Initializes a new agent project with boilerplate structure from templates. Creates project directory with `agents/` subdirectory, `pyproject.toml`, and `README.md`. Installs project in editable mode.
 
-### `rayai create-agent <agent_name>`
-Creates a new agent from template with proper structure and imports.
+### `rayai create-agent <agent_name> [--framework=<framework>]`
+Creates a new agent in the `agents/<agent_name>/` directory. Supports multiple frameworks:
+- `python` (default): Pure Python agent template
+- `langchain`: LangChain/LangGraph agent template
+- `pydantic`: Pydantic AI agent template
 
-### `rayai serve [options]`
-Serves an agent using Ray Serve with FastAPI endpoints.
+Each template includes framework-specific boilerplate with `@agent` decorator and example tools.
+
+### `rayai serve [--port=<port>] [--agents=<comma-separated>]`
+Discovers and serves agents from the `agents/` directory using Ray Serve. 
+- Automatically finds all `@agent` decorated classes in `agents/*/agent.py`
+- Creates FastAPI endpoints at `/agents/<agent_name>/chat`
+- Supports serving specific agents via `--agents` flag
+- Each agent runs with resource configuration from `@agent` decorator
 
 ## Key Files
-- `cli.py`: Main CLI group and entry point
-- `commands/init.py`: Project initialization logic
-- `commands/create_agent.py`: Agent template generation
-- `commands/serve.py`: Ray Serve deployment logic
-- `templates/agent/`: Template files for agent scaffolding
+- `cli.py`: Main CLI group and entry point, registers all commands
+- `commands/init.py`: Project initialization from templates, handles `pyproject.toml` and `README.md` variable substitution
+- `commands/create_agent.py`: Agent creation with framework-specific templates (python/langchain/pydantic)
+- `commands/serve.py`: Agent discovery from `agents/` directory, Ray Serve deployment, FastAPI endpoint creation
+- `templates/agent/`: Project template structure (agents/, pyproject.toml, README.md)
 
 ## Do / Don't
 
@@ -72,8 +83,10 @@ Serves an agent using Ray Serve with FastAPI endpoints.
 6. Update main README if command is user-facing
 
 ## Related Modules
-- `src/ray_agents/deployment.py` - Ray Serve deployment utilities used by `serve` command
+- `src/ray_agents/deployment.py` - Ray Serve deployment utilities used by `serve` command (supports streaming via `run_stream`/`run_stream_events`)
 - `src/ray_agents/base.py` - AgentProtocol used for validation
+- `src/ray_agents/decorators.py` - `@agent` decorator used for agent discovery
+- `src/ray_agents/resource_loader.py` - Memory parsing used by deployment
 - `examples/` - Example agents that can be served
 - Templates reference core runtime APIs
 

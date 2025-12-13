@@ -8,14 +8,15 @@ It is the heart of the system and provides the foundational abstractions for bui
 
 ## Directory Structure
 
-- `base.py` - Core protocols and interfaces (AgentProtocol)
+- `base.py` - Core protocols and interfaces (`AgentProtocol`)
 - `adapters/` - Framework adapters for LangChain, Pydantic AI, etc.
 - `cli/` - Command-line interface for agent management
 - `sandbox/` - Secure code execution with Docker/gVisor
-- `deployment.py` - Ray Serve deployment utilities
-- `decorators.py` - Tool decoration utilities
-- `resource_loader.py` - Resource loading utilities
-- `utils.py` - Shared utility functions
+- `deployment.py` - Ray Serve deployment utilities with streaming support (`run_stream`, `run_stream_events`)
+- `decorators.py` - `@tool` and `@agent` decorators for marking functions/classes
+- `resource_loader.py` - Memory parsing utilities (`_parse_memory`)
+- `utils.py` - `execute_tools()` for parallel/sequential tool execution
+- `examples/` - Minimal examples directory (currently just `__init__.py`)
 
 ## Key Concepts an AI Should Know
 
@@ -24,8 +25,11 @@ It is the heart of the system and provides the foundational abstractions for bui
 - Sandbox execution must stay isolated; do not allow host-level operations unless explicitly whitelisted
 - This layer should be lightweight and dependency-minimal
 - The `AgentProtocol` defines the interface for servable agents (must implement `run(data: dict) -> dict`)
-- Tools are decorated with `@tool` to become Ray remote functions
+- **`@tool` decorator**: Converts functions to Ray remote functions with resource requirements (CPUs, GPUs, memory)
+- **`@agent` decorator**: Marks classes as servable agents with resource configuration and replica count
+- **`execute_tools()`**: Utility for executing multiple tools sequentially or in parallel
 - Adapters bridge between agent frameworks and Ray's execution model
+- Tools decorated with `@tool` have `_remote_func`, `_tool_metadata`, and `_original_func` attributes
 
 ## How Code Here Is Intended to Be Used
 
