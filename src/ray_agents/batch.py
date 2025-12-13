@@ -12,7 +12,6 @@ from ray_agents.adapters.core import RayTool, to_raytool
 
 def batch(
     tool: Callable | RayTool,
-    max_concurrency: int | None = None,
     description: str | None = None,
 ) -> Callable:
     """Create a batch version of a tool for parallel execution.
@@ -23,7 +22,6 @@ def batch(
 
     Args:
         tool: Any tool (decorated function, wrapped tool, or RayTool)
-        max_concurrency: Optional limit on parallel executions (default: unlimited)
         description: Optional custom description for the batch tool
 
     Returns:
@@ -92,22 +90,11 @@ def batch(
             if not inputs:
                 return []
 
-            if max_concurrency is None:
-                if input_style == "single_input":
-                    refs = [ray_remote.remote(inp) for inp in inputs]
-                else:
-                    refs = [ray_remote.remote(**inp) for inp in inputs]
-                return ray.get(refs)
+            if input_style == "single_input":
+                refs = [ray_remote.remote(inp) for inp in inputs]
             else:
-                results = []
-                for i in range(0, len(inputs), max_concurrency):
-                    batch_inputs = inputs[i : i + max_concurrency]
-                    if input_style == "single_input":
-                        refs = [ray_remote.remote(inp) for inp in batch_inputs]
-                    else:
-                        refs = [ray_remote.remote(**inp) for inp in batch_inputs]
-                    results.extend(ray.get(refs))
-                return results
+                refs = [ray_remote.remote(**inp) for inp in inputs]
+            return ray.get(refs)
 
         executor.__name__ = name
         executor.__qualname__ = name
@@ -148,7 +135,6 @@ def batch(
         "desc": batch_desc,
         "is_batch": True,
         "original_tool": original_name,
-        "max_concurrency": max_concurrency,
     }
 
     sync_wrapper.args_schema = _create_batch_args_schema(  # type: ignore[attr-defined]
