@@ -51,6 +51,38 @@ lc_tools = wrapper.wrap_tools([search_web])
 agent = create_react_agent(llm, lc_tools)
 ```
 
+## Cross-framework tools
+
+Use tools from **any framework** with your LangChain agents. `RayToolWrapper` auto-detects the source framework and converts tools to LangChain-compatible `BaseTool` instances:
+
+```python
+from pydantic_ai import Tool as PydanticTool
+from ray_agents.adapters import RayToolWrapper, AgentFramework
+
+# Pydantic AI tool
+def multiply(x: int, y: int) -> int:
+    """Multiply two numbers."""
+    return x * y
+
+pydantic_tool = PydanticTool(multiply, name="multiply")
+
+# Plain Python function
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}!"
+
+# Convert ANY tools to LangChain format
+wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
+lc_tools = wrapper.wrap_tools([pydantic_tool, greet], num_cpus=1)
+
+# Use with LangChain agent - all tools execute on Ray
+agent = create_react_agent(llm, lc_tools)
+```
+
+<Info>
+The wrapper auto-detects: Ray `@tool` functions, LangChain `BaseTool`, Pydantic AI `Tool`, and plain Python callables.
+</Info>
+
 ## Next steps
 
 <CardGroup cols={2}>

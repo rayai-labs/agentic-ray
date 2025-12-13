@@ -55,6 +55,35 @@ pydantic_tools = wrapper.wrap_tools([search_web])
 agent = Agent("openai:gpt-4o-mini", tools=pydantic_tools)
 ```
 
+## Cross-framework tools
+
+Use tools from **any framework** with your Pydantic AI agents. `RayToolWrapper` auto-detects the source framework and converts tools to Pydantic AI-compatible callables:
+
+```python
+from langchain_community.tools import DuckDuckGoSearchRun
+from pydantic_ai import Agent
+from ray_agents.adapters import RayToolWrapper, AgentFramework
+
+# LangChain tool
+langchain_search = DuckDuckGoSearchRun()
+
+# Plain Python function
+def calculate(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
+
+# Convert ANY tools to Pydantic AI format
+wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
+tools = wrapper.wrap_tools([langchain_search, calculate], num_cpus=1)
+
+# Use with Pydantic AI agent - all tools execute on Ray
+agent = Agent("openai:gpt-4o-mini", tools=tools)
+```
+
+<Info>
+The wrapper auto-detects: Ray `@tool` functions, LangChain `BaseTool`, Pydantic AI `Tool`, and plain Python callables. Type annotations and docstrings are preserved for schema generation.
+</Info>
+
 ## Next steps
 
 <CardGroup cols={2}>

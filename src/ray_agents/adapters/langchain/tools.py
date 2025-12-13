@@ -1,6 +1,5 @@
-"""Converter for LangChain tools to Ray-compatible tools."""
+"""Converter for LangChain tools to Ray-executed LangChain tools."""
 
-from collections.abc import Callable
 from typing import Any
 
 import ray
@@ -11,8 +10,11 @@ def from_langchain_tool(
     num_cpus: int = 1,
     memory: int | float = 256 * 1024**2,
     num_gpus: int = 0,
-) -> Callable:
-    """Convert a LangChain tool to a Ray-compatible remote function.
+) -> Any:
+    """Wrap a LangChain tool to execute on Ray workers.
+
+    Returns a LangChain BaseTool that can be used directly with LangChain agents.
+    The tool's execution is distributed to Ray workers with the specified resources.
 
     Args:
         langchain_tool: LangChain tool (BaseTool instance)
@@ -21,11 +23,23 @@ def from_langchain_tool(
         num_gpus: Number of GPUs to allocate (default: 0)
 
     Returns:
-        Ray remote function compatible with RayAgent.register_tools()
+        LangChain BaseTool that executes on Ray workers
 
     Raises:
         ImportError: If langchain-core is not installed
         ValueError: If tool is not a LangChain BaseTool
+
+    Example:
+        ```python
+        from langchain_community.tools import DuckDuckGoSearchRun
+        from ray_agents.adapters import from_langchain_tool
+
+        # Wrap for Ray execution
+        search = from_langchain_tool(DuckDuckGoSearchRun(), num_cpus=1)
+
+        # Use directly with LangChain agent
+        agent = create_react_agent(llm, [search])
+        ```
     """
     try:
         from langchain_core.tools import BaseTool
@@ -40,230 +54,38 @@ def from_langchain_tool(
             f"Expected LangChain BaseTool, got {type(langchain_tool).__name__}"
         )
 
-    tool_name = langchain_tool.name
-    tool_description = langchain_tool.description
-
     if isinstance(memory, float) and memory < 1024:
         memory_bytes = int(memory * (1024**3))
     else:
         memory_bytes = int(memory)
 
-    def _normalize_input(kwargs: dict[str, Any]) -> str | dict[str, Any]:
-        """Normalize kwargs to format expected by LangChain tools."""
-        if len(kwargs) == 1:
-            return next(iter(kwargs.values()))  # type: ignore[no-any-return]
-        elif len(kwargs) == 0:
-            return ""
+    # Create Ray remote function for tool execution
+    @ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)
+    def _execute_tool(tool_input: Any) -> Any:
+        return langchain_tool.invoke(tool_input)
+
+    def _normalize_input(*args: Any, **kwargs: Any) -> Any:
+        """Normalize input for LangChain tools."""
+        if args and not kwargs:
+            return args[0] if len(args) == 1 else args
+        elif kwargs and not args:
+            return next(iter(kwargs.values())) if len(kwargs) == 1 else kwargs
         else:
-            return kwargs
+            return kwargs or ""
 
-    def _create_dynamic_wrapper(
-        lc_tool: Any, name: str, args_schema: Any = None
-    ) -> Callable:
-        """
-        Create a wrapper function with proper signature based on args_schema.
+    # Create a new tool class that wraps execution in Ray
+    class RayLangChainTool(BaseTool):
+        name: str = langchain_tool.name
+        description: str = langchain_tool.description
+        args_schema: type | None = getattr(langchain_tool, "args_schema", None)
 
-        This ensures LLMs can see the required
-        parameters and their types, rather than just **kwargs.
+        def _run(self, *args: Any, **kwargs: Any) -> Any:
+            tool_input = _normalize_input(*args, **kwargs)
+            return ray.get(_execute_tool.remote(tool_input))
 
-        Uses exec() to dynamically create a real function with proper parameters
-        so that typing.get_type_hints() works correctly.
-        """
-        if args_schema is None:
-            return _create_simple_wrapper(lc_tool, name)
+        async def _arun(self, *args: Any, **kwargs: Any) -> Any:
+            tool_input = _normalize_input(*args, **kwargs)
+            # Ray ObjectRefs are awaitable
+            return await _execute_tool.remote(tool_input)
 
-        try:
-            if hasattr(args_schema, "model_fields"):
-                fields = args_schema.model_fields
-            elif hasattr(args_schema, "__fields__"):
-                fields = args_schema.__fields__
-            else:
-                return _create_simple_wrapper(lc_tool, name)
-        except Exception:
-            return _create_simple_wrapper(lc_tool, name)
-
-        if not fields:
-            return _create_simple_wrapper(lc_tool, name)
-
-        param_strings = []
-        param_docs = []
-        annotations = {}
-
-        for field_name, field_info in fields.items():
-            if hasattr(field_info, "annotation"):
-                field_type = field_info.annotation
-            else:
-                field_type = Any
-
-            annotations[field_name] = field_type
-
-            if hasattr(field_info, "description") and field_info.description:
-                param_docs.append(f"        {field_name}: {field_info.description}")
-
-            is_required = getattr(field_info, "is_required", lambda: True)()
-            if callable(is_required):
-                is_required = is_required()
-
-            if is_required:
-                param_strings.append(f"{field_name}")
-            else:
-                default_val = getattr(field_info, "default", None)
-                if default_val is None:
-                    param_strings.append(f"{field_name}=None")
-                else:
-                    param_strings.append(f"{field_name}={repr(default_val)}")
-
-        base_doc = lc_tool.description or f"Calls {name}"
-        if param_docs:
-            full_doc = f"{base_doc}\n\n    Args:\n" + "\n".join(param_docs)
-        else:
-            full_doc = base_doc
-
-        params_str = ", ".join(param_strings)
-        func_code = f"""
-def {name}({params_str}):
-    \"\"\"Dynamically generated wrapper\"\"\"
-    kwargs = {{{', '.join(f"'{k}': {k}" for k in fields.keys())}}}
-    return _tool_executor(kwargs)
-
-async def {name}_async({params_str}):
-    \"\"\"Async version\"\"\"
-    kwargs = {{{', '.join(f"'{k}': {k}" for k in fields.keys())}}}
-    return await _async_tool_executor(kwargs)
-"""
-
-        def _tool_executor(kwargs: dict[str, Any]) -> dict[str, Any]:
-            try:
-                tool_input = _normalize_input(kwargs)
-                result = lc_tool.invoke(tool_input)
-                return {
-                    "result": result,
-                    "status": "success",
-                    "tool": name,
-                }
-            except Exception as e:
-                return {
-                    "error": str(e),
-                    "status": "error",
-                    "tool": name,
-                }
-
-        async def _async_tool_executor(kwargs: dict[str, Any]) -> dict[str, Any]:
-            try:
-                tool_input = _normalize_input(kwargs)
-                result = await lc_tool.ainvoke(tool_input)
-                return {
-                    "result": result,
-                    "status": "success",
-                    "tool": name,
-                }
-            except Exception as e:
-                return {
-                    "error": str(e),
-                    "status": "error",
-                    "tool": name,
-                }
-
-        local_vars: dict[str, Any] = {
-            "_tool_executor": _tool_executor,
-            "_async_tool_executor": _async_tool_executor,
-        }
-        exec(func_code, local_vars)
-
-        wrapper = local_vars[name]
-        async_wrapper = local_vars[f"{name}_async"]
-
-        wrapper.__annotations__ = {**annotations, "return": dict[str, Any]}
-        async_wrapper.__annotations__ = {**annotations, "return": dict[str, Any]}
-
-        wrapper.__doc__ = full_doc
-        async_wrapper.__doc__ = full_doc
-
-        wrapper._async = async_wrapper
-
-        return wrapper  # type: ignore[no-any-return]
-
-    def _create_simple_wrapper(lc_tool: Any, name: str) -> Callable:
-        """Fallback wrapper when no args_schema is available."""
-
-        def wrapper(**kwargs: Any) -> dict[str, Any]:
-            try:
-                tool_input = _normalize_input(kwargs)
-                result = lc_tool.invoke(tool_input)
-                return {
-                    "result": result,
-                    "status": "success",
-                    "tool": name,
-                }
-            except Exception as e:
-                return {
-                    "error": str(e),
-                    "status": "error",
-                    "tool": name,
-                }
-
-        async def async_wrapper(**kwargs: Any) -> dict[str, Any]:
-            """Async version for LangGraph compatibility."""
-            try:
-                tool_input = _normalize_input(kwargs)
-                result = await lc_tool.ainvoke(tool_input)
-                return {
-                    "result": result,
-                    "status": "success",
-                    "tool": name,
-                }
-            except Exception as e:
-                return {
-                    "error": str(e),
-                    "status": "error",
-                    "tool": name,
-                }
-
-        wrapper.__name__ = name
-        wrapper.__qualname__ = name
-        wrapper.__doc__ = lc_tool.description
-        wrapper._async = async_wrapper  # type: ignore[attr-defined]
-        return wrapper
-
-    args_schema = (
-        langchain_tool.args_schema if hasattr(langchain_tool, "args_schema") else None
-    )
-
-    tool_wrapper = _create_dynamic_wrapper(langchain_tool, tool_name, args_schema)
-
-    ray_remote_func = ray.remote(
-        num_cpus=num_cpus,
-        memory=memory_bytes,
-        num_gpus=num_gpus,
-    )(tool_wrapper)
-
-    def sync_wrapper(**kwargs: Any) -> dict[str, Any]:
-        """Synchronous wrapper that executes the Ray remote function."""
-        return ray.get(ray_remote_func.remote(**kwargs))  # type: ignore[no-any-return]
-
-    async def async_wrapper(**kwargs: Any) -> dict[str, Any]:
-        """Async wrapper that enables parallel execution."""
-        object_ref = ray_remote_func.remote(**kwargs)
-        return await object_ref  # type: ignore[no-any-return]
-
-    sync_wrapper.__name__ = tool_name
-    sync_wrapper.__doc__ = tool_description
-    sync_wrapper._remote_func = ray_remote_func  # type: ignore[attr-defined]
-    sync_wrapper._async = async_wrapper  # type: ignore[attr-defined]
-
-    if hasattr(tool_wrapper, "__signature__"):
-        sync_wrapper.__signature__ = tool_wrapper.__signature__  # type: ignore[attr-defined]
-        async_wrapper.__signature__ = tool_wrapper.__signature__  # type: ignore[attr-defined]
-
-    if hasattr(tool_wrapper, "__annotations__"):
-        sync_wrapper.__annotations__ = tool_wrapper.__annotations__
-        async_wrapper.__annotations__ = tool_wrapper.__annotations__
-
-    if (
-        hasattr(langchain_tool, "args_schema")
-        and langchain_tool.args_schema is not None
-    ):
-        sync_wrapper.args_schema = langchain_tool.args_schema  # type: ignore[attr-defined]
-        async_wrapper.args_schema = langchain_tool.args_schema  # type: ignore[attr-defined]
-
-    return sync_wrapper
+    return RayLangChainTool()

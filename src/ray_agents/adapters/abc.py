@@ -1,12 +1,9 @@
-"""Tool adapter for agent frameworks."""
+"""Ray tool wrapper for agent frameworks."""
 
-import functools
 import logging
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
-
-import ray
 
 logger = logging.getLogger(__name__)
 
@@ -18,96 +15,75 @@ class AgentFramework(Enum):
     PYDANTIC = "pydantic"
 
 
-class ToolAdapter:
+class RayToolWrapper:
     """
-    Adapter for wrapping Ray tools for use with agent frameworks.
+    Wrapper for converting tools to framework-compatible callables.
 
-    Wraps Ray remote functions as framework-compatible callables.
-    The adapter only handles tool wrapping - users manage their own
-    agents and conversation history.
+    Supports cross-framework conversion: tools from any supported framework
+    (LangChain, Pydantic AI, plain callables, or Ray @tool decorated functions)
+    can be converted to any target framework.
 
     Example:
-        adapter = ToolAdapter(framework=AgentFramework.LANGCHAIN)
-        wrapped_tools = adapter.wrap_tools(ray_tools)
+        # Convert Ray @tool decorated functions to LangChain
+        wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
+        lc_tools = wrapper.wrap_tools([my_ray_tool])
 
-        # User manages their own agent
-        agent = create_react_agent(llm, wrapped_tools)
-        result = await agent.ainvoke({"messages": my_history})
+        # Cross-framework: LangChain tools to Pydantic
+        wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
+        pydantic_tools = wrapper.wrap_tools([langchain_search_tool], num_cpus=2)
+
+        # Mix tools from different frameworks
+        wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
+        tools = wrapper.wrap_tools([langchain_tool, pydantic_tool, plain_func])
     """
 
     def __init__(self, framework: AgentFramework):
         """
-        Initialize tool adapter.
+        Initialize tool wrapper.
 
         Args:
             framework: Target agent framework for tool wrapping
         """
         self.framework = framework
 
-    def wrap_tools(self, ray_tools: list[Any]) -> list[Callable]:
+    def wrap_tools(
+        self,
+        tools: list[Any],
+        num_cpus: int = 1,
+        memory: int | float = 256 * 1024**2,
+        num_gpus: int = 0,
+    ) -> list[Callable]:
         """
-        Wrap Ray remote functions as framework-compatible callables.
+        Wrap tools as framework-compatible callables.
+
+        Auto-detects the source framework (Ray @tool, LangChain, Pydantic AI,
+        or plain callable) and converts each tool to the target framework.
+        All tool execution is distributed to Ray workers.
 
         Args:
-            ray_tools: List of Ray remote functions (from @tool decorator
-                      or from_langchain_tool())
+            tools: List of tools from any supported framework:
+                - Ray @tool decorated functions
+                - LangChain BaseTool instances
+                - Pydantic AI Tool instances
+                - Plain Python callables
+            num_cpus: Number of CPUs to allocate per tool invocation (default: 1)
+            memory: Memory allocation - int for bytes, float < 1024 for GB (default: 256MB)
+            num_gpus: Number of GPUs to allocate (default: 0)
 
         Returns:
             List of wrapped callables compatible with the target framework
         """
+        from ray_agents.adapters.core import from_raytool, to_raytool
+
         wrapped_tools = []
 
-        for ray_tool in ray_tools:
-            if hasattr(ray_tool, "remote"):
-                remote_func = ray_tool
-            elif hasattr(ray_tool, "_remote_func"):
-                remote_func = ray_tool._remote_func
-            else:
-                logger.warning(
-                    f"Tool {ray_tool} is not a Ray remote function, skipping"
-                )
+        for tool in tools:
+            try:
+                ray_tool = to_raytool(tool, num_cpus, memory, num_gpus)
+                wrapped = from_raytool(ray_tool, self.framework)
+                wrapped_tools.append(wrapped)
+            except ValueError as e:
+                logger.warning(f"Could not convert tool {tool}: {e}")
                 continue
 
-            wrapped_tools.append(self._make_tool_wrapper(remote_func, ray_tool))
-
         return wrapped_tools
-
-    def _make_tool_wrapper(self, tool: Any, original_tool: Any) -> Callable:
-        """
-        Create a sync wrapper for a Ray remote tool.
-
-        The wrapper executes the tool on Ray and handles error status dicts.
-
-        Args:
-            tool: Ray remote function to wrap
-            original_tool: Original tool for preserving metadata
-
-        Returns:
-            Sync callable that dispatches to Ray
-        """
-        if hasattr(tool, "_function"):
-            original_func = tool._function
-        elif hasattr(original_tool, "__name__"):
-            original_func = original_tool
-        else:
-            original_func = tool
-
-        @functools.wraps(original_func)
-        def sync_wrapper(*args, **kwargs):
-            object_ref = tool.remote(*args, **kwargs)
-            result = ray.get(object_ref)
-
-            if isinstance(result, dict) and "status" in result:
-                if result["status"] == "error":
-                    error_msg = result.get("error", "Unknown error")
-                    raise RuntimeError(f"Tool error: {error_msg}")
-                if "result" in result:
-                    result = result["result"]
-
-            return result
-
-        # Preserve args_schema for LLM tool specifications
-        if hasattr(original_tool, "args_schema"):
-            sync_wrapper.args_schema = original_tool.args_schema  # type: ignore[attr-defined]
-
-        return sync_wrapper
