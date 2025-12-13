@@ -1,0 +1,95 @@
+---
+title: "Batch Tool"
+description: "Execute multiple instances of a tool in parallel with a single LLM call"
+---
+
+The `batch()` function converts a single tool into a batch tool that allows LLMs to execute multiple instances of the same tool in parallel with a single tool call.
+
+## Overview
+
+Without `batch()`, an LLM looking up 5 Wikipedia articles must either:
+- Make 5 sequential tool calls (slow)
+- Make 5 parallel tool calls (multiple LLM round trips)
+
+With `batch()`, the LLM makes **one call** with all 5 inputs, and Ray executes them in parallel - fewer round trips, lower latency.
+
+## Usage
+
+### Basic Usage
+
+```python
+from ray_agents import tool, batch
+
+@tool(desc="Look up information about a topic")
+def lookup_topic(topic: str) -> str:
+    return f"Information about {topic}"
+
+# Create batch version
+lookup_topic_batch = batch(lookup_topic)
+```
+
+The LLM can now call `lookup_topic_batch` with multiple topics:
+
+```python
+# LLM calls:
+lookup_topic_batch(topics=["Python", "Rust", "Go"])
+
+# Returns: ["Information about Python", "Information about Rust", "Information about Go"]
+```
+
+### With LangChain Agent
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_community.tools import WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
+from langgraph.prebuilt import create_react_agent
+
+from ray_agents import batch
+from ray_agents.adapters import RayToolWrapper, AgentFramework
+
+# LangChain Wikipedia tool
+wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+
+# Convert to Ray-distributed tool for LangChain
+wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
+[wikipedia_tool] = wrapper.wrap_tools([wikipedia], num_cpus=1)
+
+# Create batch version
+wikipedia_batch = batch(wikipedia_tool)
+
+# Create LangChain agent with the batch tool
+llm = ChatOpenAI(model="gpt-4o-mini")
+agent = create_react_agent(llm, tools=[wikipedia_batch])
+
+# The agent can now batch Wikipedia lookups
+response = agent.invoke({
+    "messages": [{"role": "user", "content": "Compare Python, Rust, and Go programming languages"}]
+})
+
+# LLM calls: wikipedia_batch(querys=["Python", "Rust", "Go"])
+# Ray executes all 3 lookups in parallel, returns results as a list
+```
+
+## API Reference
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tool` | `Callable` | Required. A `@tool` decorated function or wrapped tool |
+| `description` | `str` | Optional. Custom description for the batch tool |
+
+<Info>
+Batch tools automatically pluralize parameter names. A tool with `topic: str` becomes `topics: list[str]` in the batch version.
+</Info>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Code Execution" icon="code" href="/tools/native/execute-code">
+    Run Python code in sandboxed containers
+  </Card>
+  <Card title="Third-Party Tools" icon="plug" href="/tools/third-party">
+    Use LangChain and other framework tools
+  </Card>
+</CardGroup>
+
