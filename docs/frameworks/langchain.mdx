@@ -22,7 +22,7 @@ Wrap any LangChain tool to execute on Ray workers:
 ```python
 from langchain_community.tools import DuckDuckGoSearchRun
 from langgraph.prebuilt import create_react_agent
-from ray_agents.adapters import from_langchain_tool
+from rayai.adapters import from_langchain_tool
 
 # Wrap for Ray execution (returns a LangChain tool)
 search = from_langchain_tool(DuckDuckGoSearchRun(), num_cpus=1)
@@ -36,8 +36,8 @@ agent = create_react_agent(llm, [search])
 Wrap Ray tools for use with LangChain agents:
 
 ```python
-from ray_agents import tool
-from ray_agents.adapters import RayToolWrapper, AgentFramework
+from rayai import tool
+from rayai.adapters import RayToolWrapper, AgentFramework
 
 @tool(desc="Search the web", num_cpus=1)
 def search_web(query: str) -> str:
@@ -57,7 +57,7 @@ Use tools from **any framework** with your LangChain agents. `RayToolWrapper` au
 
 ```python
 from pydantic_ai import Tool as PydanticTool
-from ray_agents.adapters import RayToolWrapper, AgentFramework
+from rayai.adapters import RayToolWrapper, AgentFramework
 
 # Pydantic AI tool
 def multiply(x: int, y: int) -> int:

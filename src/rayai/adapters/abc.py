@@ -73,7 +73,7 @@ class RayToolWrapper:
         Returns:
             List of wrapped callables compatible with the target framework
         """
-        from ray_agents.adapters.core import from_raytool, to_raytool
+        from rayai.adapters.core import from_raytool, to_raytool
 
         wrapped_tools = []
 

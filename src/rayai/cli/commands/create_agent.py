@@ -71,7 +71,7 @@ def _get_python_template(agent_name: str) -> str:
     """Get pure Python agent template."""
     return f'''"""Pure Python agent implementation for {agent_name}."""
 
-from ray_agents import agent, tool, execute_tools
+from rayai import agent, tool, execute_tools
 
 
 # Define tools with resource requirements
@@ -142,8 +142,8 @@ def _get_langchain_template(agent_name: str) -> str:
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
-from ray_agents import agent, tool
-from ray_agents.adapters import AgentFramework, RayToolWrapper
+from rayai import agent, tool
+from rayai.adapters import AgentFramework, RayToolWrapper
 
 
 # Define tools with resource requirements
@@ -224,8 +224,8 @@ def _get_pydantic_template(agent_name: str) -> str:
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from ray_agents import agent, tool
-from ray_agents.adapters import AgentFramework, RayToolWrapper
+from rayai import agent, tool
+from rayai.adapters import AgentFramework, RayToolWrapper
 
 
 # Define tools with resource requirements

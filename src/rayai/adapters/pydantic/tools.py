@@ -34,7 +34,7 @@ def from_pydantic_tool(
     Example:
         ```python
         from pydantic_ai import Agent, Tool
-        from ray_agents.adapters import from_pydantic_tool
+        from rayai.adapters import from_pydantic_tool
 
         def get_weather(city: str) -> str:
             '''Get the current weather for a city.'''
@@ -60,7 +60,7 @@ def from_pydantic_tool(
     if not isinstance(pydantic_tool, Tool):
         raise ValueError(
             f"Expected Pydantic AI Tool instance, got {type(pydantic_tool).__name__}. "
-            "For plain functions, use the @tool decorator from ray_agents instead."
+            "For plain functions, use the @tool decorator from rayai instead."
         )
 
     func = pydantic_tool.function

@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 import ray
 
-from ray_agents.adapters import AgentFramework, RayToolWrapper
+from rayai.adapters import AgentFramework, RayToolWrapper
 
 
 class TestLangChainIntegration:
@@ -121,7 +121,7 @@ class TestFromLangChainTool:
         from langchain_core.tools import BaseTool
         from langchain_core.tools import tool as langchain_tool
 
-        from ray_agents.adapters.langchain import from_langchain_tool
+        from rayai.adapters.langchain import from_langchain_tool
 
         @langchain_tool
         def greet(name: str) -> str:
@@ -147,7 +147,7 @@ class TestFromLangChainTool:
 
         from langchain_core.tools import tool as langchain_tool
 
-        from ray_agents.adapters.langchain import from_langchain_tool
+        from rayai.adapters.langchain import from_langchain_tool
 
         @langchain_tool
         def add(a: int, b: int) -> int:
@@ -177,7 +177,7 @@ class TestToolExecutionDistributed:
         wrapped = wrapper.wrap_tools([tracked_tool])
 
         # Patch ray.get in core module to verify it's called
-        with patch("ray_agents.adapters.core.ray.get") as mock_get:
+        with patch("rayai.adapters.core.ray.get") as mock_get:
             # Set up mock to return actual result
             mock_get.return_value = 10
 

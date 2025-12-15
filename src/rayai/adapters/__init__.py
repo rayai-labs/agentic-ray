@@ -1,8 +1,8 @@
 """Adapters for different agent frameworks to integrate with Ray distributed tool execution."""
 
-from ray_agents.adapters.abc import AgentFramework, RayToolWrapper
-from ray_agents.adapters.langchain import from_langchain_tool
-from ray_agents.adapters.pydantic import from_pydantic_tool
+from rayai.adapters.abc import AgentFramework, RayToolWrapper
+from rayai.adapters.langchain import from_langchain_tool
+from rayai.adapters.pydantic import from_pydantic_tool
 
 __all__ = [
     "AgentFramework",

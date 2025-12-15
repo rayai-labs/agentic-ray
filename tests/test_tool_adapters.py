@@ -3,8 +3,8 @@
 import pytest
 import ray
 
-from ray_agents.adapters import AgentFramework, RayToolWrapper
-from ray_agents.adapters.core import (
+from rayai.adapters import AgentFramework, RayToolWrapper
+from rayai.adapters.core import (
     RayTool,
     SourceFramework,
     detect_framework,

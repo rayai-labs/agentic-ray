@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 import ray
 
 if TYPE_CHECKING:
-    from ray_agents.adapters.abc import AgentFramework
+    from rayai.adapters.abc import AgentFramework
 
 
 class SourceFramework(Enum):
@@ -59,9 +59,10 @@ def detect_framework(tool: Any) -> SourceFramework:
 
     Detection order (most specific first):
     1. Ray @tool decorated - has _remote_func attribute
-    2. LangChain BaseTool - isinstance check
-    3. Pydantic AI Tool - isinstance check
-    4. Plain callable - callable() check
+    2. BatchTool - has _tool_metadata with is_batch_tool
+    3. LangChain BaseTool - isinstance check
+    4. Pydantic AI Tool - isinstance check
+    5. Plain callable - callable() check
 
     Args:
         tool: The tool to detect
@@ -74,6 +75,15 @@ def detect_framework(tool: Any) -> SourceFramework:
     """
     # Check for Ray @tool decorated functions first
     if hasattr(tool, "_remote_func") or hasattr(tool, "remote"):
+        return SourceFramework.RAY_TOOL
+
+    # Check for BatchTool
+    if (
+        callable(tool)
+        and hasattr(tool, "_tool_metadata")
+        and isinstance(tool._tool_metadata, dict)
+        and tool._tool_metadata.get("is_batch_tool")
+    ):
         return SourceFramework.RAY_TOOL
 
     # Try LangChain (lazy import to avoid hard dependency)
@@ -307,6 +317,41 @@ def to_raytool_from_callable(
     )
 
 
+def to_raytool_from_batch_tool(
+    tool: Any,
+    num_cpus: int,
+    memory_bytes: int,
+    num_gpus: int,
+) -> RayTool:
+    """Convert BatchTool to canonical RayTool."""
+    tool_name = tool.name
+    tool_description = tool.description
+
+    def _make_executor(name: str) -> Any:
+        def executor(tool_name: str, tool_inputs: list[dict[str, Any]]) -> dict:
+            return tool(tool_name=tool_name, tool_inputs=tool_inputs)
+
+        executor.__name__ = name
+        executor.__qualname__ = name
+        return ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)(
+            executor
+        )
+
+    ray_remote = _make_executor(tool_name)
+
+    return RayTool(
+        name=tool_name,
+        description=tool_description,
+        ray_remote=ray_remote,
+        func=tool.__call__,
+        args_schema=tool.args_schema,
+        signature=None,
+        annotations={"tool_name": str, "tool_inputs": list[dict[str, Any]]},
+        return_annotation=dict,
+        source_framework="batch_tool",
+    )
+
+
 def to_raytool(
     tool: Any,
     num_cpus: int = 1,
@@ -325,6 +370,16 @@ def to_raytool(
         Canonical RayTool representation
     """
     memory_bytes = _normalize_memory(memory)
+
+    # Check for BatchTool first (special case of callable with metadata)
+    if (
+        callable(tool)
+        and hasattr(tool, "_tool_metadata")
+        and isinstance(tool._tool_metadata, dict)
+        and tool._tool_metadata.get("is_batch_tool")
+    ):
+        return to_raytool_from_batch_tool(tool, num_cpus, memory_bytes, num_gpus)
+
     source = detect_framework(tool)
 
     if source == SourceFramework.RAY_TOOL:
@@ -478,7 +533,7 @@ def from_raytool(ray_tool: RayTool, target: "AgentFramework") -> Any:
         Tool compatible with target framework
     """
     # Import here to avoid circular import
-    from ray_agents.adapters.abc import AgentFramework
+    from rayai.adapters.abc import AgentFramework
 
     if target == AgentFramework.LANGCHAIN:
         return from_raytool_to_langchain(ray_tool)
