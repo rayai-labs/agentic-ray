@@ -15,6 +15,7 @@ import ray
 
 if TYPE_CHECKING:
     from rayai.adapters.abc import AgentFramework
+    from rayai.batch import BatchTool
 
 
 class SourceFramework(Enum):
@@ -318,7 +319,7 @@ def to_raytool_from_callable(
 
 
 def to_raytool_from_batch_tool(
-    tool: Any,
+    tool: "BatchTool",
     num_cpus: int,
     memory_bytes: int,
     num_gpus: int,
@@ -328,7 +329,9 @@ def to_raytool_from_batch_tool(
     tool_description = tool.description
 
     def _make_executor(name: str) -> Any:
-        def executor(tool_name: str, tool_inputs: list[dict[str, Any]]) -> dict:
+        def executor(
+            tool_name: str, tool_inputs: list[dict[str, Any]]
+        ) -> dict[str, Any]:
             return tool(tool_name=tool_name, tool_inputs=tool_inputs)
 
         executor.__name__ = name
