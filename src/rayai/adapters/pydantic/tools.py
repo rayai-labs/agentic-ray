@@ -75,7 +75,7 @@ def from_pydantic_tool(
     # Create Ray remote function
     @ray.remote(num_cpus=num_cpus, memory=memory_bytes, num_gpus=num_gpus)
     def _execute_tool(**kwargs: Any) -> Any:
-        return func(**kwargs)
+        return func(**kwargs)  # type: ignore[call-arg]
 
     # Create wrapper function that Pydantic AI can use directly
     def ray_wrapper(**kwargs: Any) -> Any:

@@ -241,7 +241,7 @@ def to_raytool_from_pydantic(
 
     def _make_executor(name: str) -> Any:
         def executor(**kwargs: Any) -> Any:
-            return func(**kwargs)
+            return func(**kwargs)  # type: ignore[call-arg]
 
         executor.__name__ = name
         executor.__qualname__ = name
@@ -443,7 +443,7 @@ def from_raytool_to_langchain(ray_tool: RayTool) -> Any:
                 for name, annotation in ray_tool.annotations.items()
             }
             if fields:
-                tool_args_schema = create_model(f"{ray_tool.name}Input", **fields)
+                tool_args_schema = create_model(f"{ray_tool.name}Input", **fields)  # type: ignore[call-overload]
         except ImportError:
             pass
 
