@@ -188,7 +188,7 @@ RayAI collects anonymous usage data to help improve the CLI:
 - Commands run (init, create-agent, serve)
 - Framework choices (python, langchain, pydantic)
 
-No personal data, project names, or code is ever collected.
+No PII data, project information, or code is collected by telemetry without your explicit approval.
 
 To opt out:
 ```bash

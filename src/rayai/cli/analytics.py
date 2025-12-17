@@ -4,7 +4,7 @@ import os
 import uuid
 from pathlib import Path
 
-POSTHOG_API_KEY = "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre"
+POSTHOG_PUBLIC_API_KEY = "phc_gjpDKKKQJAnkxkqLrPGrAhoariKsaHNuTpI5rVhkYre"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
 RAYAI_CONFIG_DIR = Path.home() / ".rayai"
@@ -46,7 +46,7 @@ def track(event: str, properties: dict | None = None):
         from posthog import Posthog
 
         posthog = Posthog(
-            project_api_key=POSTHOG_API_KEY, host=POSTHOG_HOST, sync_mode=True
+            project_api_key=POSTHOG_PUBLIC_API_KEY, host=POSTHOG_HOST, sync_mode=True
         )
         posthog.capture(
             distinct_id=_get_anonymous_id(),
