@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://rayai.com/"><img width="1500" height="500" alt="image (2)" src="https://github.com/user-attachments/assets/3b55d414-5669-44c7-92b1-077cb8cbad64" /></a>
+  <a href="https://rayai.com/"><img width="1185" height="395" alt="image (3)" src="https://github.com/user-attachments/assets/67d4e157-3de9-4e80-8c3d-5827470078b1" /></a>
 
   <p><strong>Scalable runtime for Agents, MCP Servers, and coding sandboxes, orchestrated with Ray.</strong></p>
 
