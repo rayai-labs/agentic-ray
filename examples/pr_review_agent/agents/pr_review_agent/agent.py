@@ -118,9 +118,11 @@ class PrReviewAgent:
 
         summary_text = "\n\n".join(aggregated_summaries)
 
+        pr_meta = pr_context.get("pr", {})
+
         message = (
-            f"PR Title: {pr_context.get('title')}\n"
-            f"PR Description: {pr_context.get('body')}\n"
+            f"PR Title: {pr_meta.get('title')}\n"
+            f"PR Description: {pr_meta.get('body')}\n"
             f"PR previous reviews: {pr_context.get('reviews')}\n"
             f"PR review comments: {pr_context.get('review_comments')}\n\n"
             f"File Review Summaries:\n{summary_text}\n\n"
@@ -134,7 +136,7 @@ class PrReviewAgent:
             if isinstance(parsed, dict):
                 overall_summary = parsed
         except json.JSONDecodeError:
-            pass
+            overall_summary = failure_payload("Failed to parse overall summary output as JSON.")
 
         final_result = {
             "summary": overall_summary,
