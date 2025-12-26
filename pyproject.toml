@@ -44,6 +44,7 @@ dev = [
     "pytest>=8.4.2",
     "ruff>=0.14.0",
     "docker>=7.0.0",  # Needed for sandbox tests
+    "agno>=2.3.21",
 ]
 
 [tool.setuptools]

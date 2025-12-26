@@ -209,3 +209,32 @@ class TestToolExecutionDistributed:
 
         assert result_a == 6  # 5 + 1
         assert result_b == 10  # 5 * 2
+
+
+class TestAgnoIntegration:
+    """Integration tests for Agno tools with RayToolWrapper.
+
+    These tests ensure that when the Agno framework is selected, wrapped tools
+    execute on Ray and remain callable from Agno's side. They are skipped when
+    the optional ``agno`` dependency is not installed.
+    """
+
+    def test_agno_wrapper_produces_callable_tool(self, ray_start):
+        """RayToolWrapper(AGNO) should return a callable that runs on Ray."""
+
+        pytest.importorskip("agno")
+
+        @ray.remote
+        def add(x: int, y: int) -> int:
+            return x + y
+
+        wrapper = RayToolWrapper(framework=AgentFramework.AGNO)
+        agno_tools = wrapper.wrap_tools([add])
+
+        assert len(agno_tools) == 1
+        tool = agno_tools[0]
+
+        # The returned object should be directly callable with kwargs and
+        # execute the underlying Ray task.
+        result = tool(x=2, y=3)
+        assert result == 5
