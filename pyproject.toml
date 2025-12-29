@@ -120,6 +120,7 @@ module = [
     "langgraph.*",
     "docker.*",
     "requests.*",
+    "ray.*",
 ]
 ignore_missing_imports = true
 

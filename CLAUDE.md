@@ -9,18 +9,44 @@ The goal is to make tool-heavy or multi-agent systems easy to scale across CPUs/
 ## Architecture Overview
 
 - **Ray-based Distribution**: Tool calls are executed as Ray tasks/actors, enabling automatic scaling and resource management
-- **Framework Adapters**: Supports multiple agent frameworks (LangChain, Pydantic AI) through adapter pattern
+- **Framework Agnostic**: Works with any agent framework (Pydantic AI, LangChain, Agno) via unified `@rayai.tool` decorator
 - **Sandbox Execution**: Secure code execution using Docker with gVisor runtime for isolation
 - **MCP Integration**: Model Context Protocol support for structured tool communication
 - **CLI Tools**: Command-line interface for agent creation, deployment, and management
 
+## Core API
+
+```python
+import rayai
+from pydantic_ai import Agent
+
+# Unified tool decorator - works with any framework
+@rayai.tool
+def search(query: str) -> str:
+    """Search the web.
+
+    ray:
+        num_cpus: 1
+    """
+    return f"Results for {query}"
+
+# Create agent with your preferred framework
+agent = Agent("openai:gpt-4", tools=[search])
+
+# Serve via HTTP with Ray Serve
+rayai.serve(agent, name="myagent", num_cpus=1, memory="2GB")
+```
+
+Run with `rayai up` or `python agents/myagent/agent.py`.
+
 ## Key Concepts an AI Should Know
 
 - A "tool call" maps to a Ray task/actor, enabling distributed execution
-- Agents may use different frameworks (LangGraph, Pydantic AI, etc.); adapters in `src/rayai/adapters/` unify them
+- `@rayai.tool` works as both decorator and wrapper for framework tools (LangChain, Pydantic AI, Agno)
+- Resource requirements can be specified via decorator args or docstring `ray:` blocks
+- `rayai.serve()` auto-detects agent framework and creates HTTP endpoints
 - Code execution happens inside controlled Docker sandboxes with gVisor for security isolation
 - The repo is framework-agnostic; avoid coupling to any single agent architecture
-- Tools are decorated with `@tool` or converted via adapters to become Ray remote functions
 - Sandbox executor manages Docker containers with resource limits, timeouts, and network isolation
 
 ## Project Structure Overview
@@ -36,12 +62,13 @@ The goal is to make tool-heavy or multi-agent systems easy to scale across CPUs/
 - **Ray Serve**: Model serving and deployment
 - **Docker + gVisor**: Container-based sandboxing with security isolation
 - **FastAPI**: HTTP API layer for agent deployments
-- **LangChain/LangGraph**: Supported agent framework
 - **Pydantic AI**: Supported agent framework
+- **LangChain/LangGraph**: Supported agent framework
+- **Agno**: Supported agent framework
 
 ## Do / Don't for AI Modifying This Repo
 
-### ✅ Do:
+### Do:
 
 - Improve documentation comments and docstrings
 - Refactor for clarity without breaking public APIs
@@ -50,7 +77,7 @@ The goal is to make tool-heavy or multi-agent systems easy to scale across CPUs/
 - Maintain security boundaries in sandbox execution
 - Update examples when adding new features
 
-### ❌ Don't:
+### Don't:
 
 - Create tight coupling to a specific agent framework
 - Modify sandbox security boundaries without explicit review
@@ -64,7 +91,6 @@ The goal is to make tool-heavy or multi-agent systems easy to scale across CPUs/
 See subdirectory `CLAUDE.md` files for detailed directory purposes:
 
 - `src/rayai/CLAUDE.md` - Core runtime implementation
-- `src/rayai/adapters/CLAUDE.md` - Framework adapters
 - `src/rayai/cli/CLAUDE.md` - CLI tools
 - `src/rayai/sandbox/CLAUDE.md` - Sandbox execution
 - `examples/CLAUDE.md` - Example applications

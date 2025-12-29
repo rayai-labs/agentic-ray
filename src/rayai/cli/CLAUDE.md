@@ -4,8 +4,8 @@
 This directory contains the command-line interface (CLI) for Agentic Ray. The CLI provides commands for:
 - Initializing new agent projects
 - Creating agent templates
-- Serving agents with Ray Serve
-- Managing agent deployments
+- Running agents with Ray Serve via `rayai up`
+- Managing analytics settings
 
 The CLI is the primary user-facing tool for interacting with the Agentic Ray runtime.
 
@@ -15,7 +15,7 @@ The CLI is the primary user-facing tool for interacting with the Agentic Ray run
 - `commands/` - Individual command implementations
   - `init.py` - Initialize new project from templates
   - `create_agent.py` - Create agent from template (python/langchain/pydantic)
-  - `serve.py` - Serve agents with Ray Serve
+  - `up.py` - Run all agents with `rayai up`
   - `analytics.py` - `rayai analytics` subcommands (on/off/status)
 - `templates/` - Project and agent templates
   - `agent/` - Agent template structure
@@ -24,42 +24,43 @@ The CLI is the primary user-facing tool for interacting with the Agentic Ray run
 - CLI uses Click framework for command-line parsing
 - Entry point is `rayai` (defined in `pyproject.toml`)
 - Commands are modular and live in `commands/` subdirectory
-- Templates are copied from `templates/agent/` directory (not Jinja2, simple file copy with string replacement)
-- `serve` command discovers agents by scanning `agents/` directory for `@agent` decorated classes
-- Agent discovery looks for `agents/<name>/agent.py` files with classes decorated with `@agent`
+- Templates are copied from `templates/agent/` directory
+- `up` command imports `agents/*/agent.py` files that call `rayai.serve()`
+- Agent discovery uses the `rayai.serve()` registration pattern
 - `create_agent` generates framework-specific templates (python, langchain, pydantic)
 - `analytics` commands manage opt-in/opt-out for anonymous CLI usage analytics
-- Analytics uses a local config dir (`~/.rayai`) and `posthog` SDK, and must never break CLI behavior
 - Commands should be self-contained and handle errors gracefully
 
 ## Command Overview
 
 ### `rayai init <project_name>`
-Initializes a new agent project with boilerplate structure from templates. Creates project directory with `agents/` subdirectory, `pyproject.toml`, and `README.md`. Installs project in editable mode.
+Initializes a new agent project with boilerplate structure from templates. Creates project directory with `agents/` subdirectory, `pyproject.toml`, and `README.md`.
 
 ### `rayai create-agent <agent_name> [--framework=<framework>]`
 Creates a new agent in the `agents/<agent_name>/` directory. Supports multiple frameworks:
-- `python` (default): Pure Python agent template
+- `python` (default): Custom agent using `rayai.Agent` base class
 - `langchain`: LangChain/LangGraph agent template
 - `pydantic`: Pydantic AI agent template
 
-Each template includes framework-specific boilerplate with `@agent` decorator and example tools.
+Each template uses `rayai.tool` for tools and `rayai.serve()` for deployment.
 
-### `rayai serve [--port=<port>] [--agents=<comma-separated>]`
-Discovers and serves agents from the `agents/` directory using Ray Serve. 
-- Automatically finds all `@agent` decorated classes in `agents/*/agent.py`
-- Creates FastAPI endpoints at `/agents/<agent_name>/chat`
-- Supports serving specific agents via `--agents` flag
-- Each agent runs with resource configuration from `@agent` decorator
+### `rayai up [--port=<port>] [--agents=<comma-separated>]`
+Imports all `agents/*/agent.py` files, collects `rayai.serve()` registrations, and starts all agents with Ray Serve.
+- Automatically finds all agent modules in `agents/` directory
+- Supports filtering specific agents via `--agents` flag
+- Each agent's resources come from `rayai.serve()` call
+
+### `rayai analytics [on|off|status]`
+Manage anonymous CLI usage analytics settings.
 
 ## Key Files
 - `cli.py`: Main CLI group and entry point, registers all commands
 - `analytics.py`: Low-level analytics helpers (`track`, anonymous ID, DO_NOT_TRACK env vars)
-- `commands/init.py`: Project initialization from templates, handles `pyproject.toml` and `README.md` variable substitution
-- `commands/create_agent.py`: Agent creation with framework-specific templates (python/langchain/pydantic)
-- `commands/serve.py`: Agent discovery from `agents/` directory, Ray Serve deployment, FastAPI endpoint creation
-- `commands/analytics.py`: User-facing `rayai analytics` command group (on/off/status)
-- `templates/agent/`: Project template structure (agents/, pyproject.toml, README.md)
+- `commands/init.py`: Project initialization from templates
+- `commands/create_agent.py`: Agent creation with framework-specific templates
+- `commands/up.py`: Import agent modules and start Ray Serve
+- `commands/analytics.py`: User-facing `rayai analytics` command group
+- `templates/agent/`: Project template structure
 
 ## Do / Don't
 
@@ -89,10 +90,8 @@ Discovers and serves agents from the `agents/` directory using Ray Serve.
 6. Update main README if command is user-facing
 
 ## Related Modules
-- `src/rayai/deployment.py` - Ray Serve deployment utilities used by `serve` command (supports streaming via `run_stream`/`run_stream_events`)
-- `src/rayai/base.py` - AgentProtocol used for validation
-- `src/rayai/decorators.py` - `@agent` decorator used for agent discovery
-- `src/rayai/resource_loader.py` - Memory parsing used by deployment
+- `src/rayai/serve.py` - `rayai.serve()` registration used by `up` command
+- `src/rayai/deployment.py` - Ray Serve deployment utilities
+- `src/rayai/decorators.py` - `@rayai.tool` decorator
 - `examples/` - Example agents that can be served
 - Templates reference core runtime APIs
-

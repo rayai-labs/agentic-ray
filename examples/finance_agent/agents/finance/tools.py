@@ -6,13 +6,16 @@ import uuid
 import ray
 import requests
 
-from rayai import tool
+import rayai
 from rayai.sandbox import execute_code
 
 
-@tool(desc="Fetch top S&P 500 stocks from API Ninjas", num_cpus=1)
+@rayai.tool
 def get_sp500(limit: int = 10) -> list[dict[str, str]]:
     """Fetch top S&P 500 stocks from API Ninjas.
+
+    ray:
+        num_cpus: 1
 
     Use this tool when the user asks about S&P 500 stocks, top companies,
     or wants to see a list of major publicly traded companies.
@@ -33,9 +36,12 @@ def get_sp500(limit: int = 10) -> list[dict[str, str]]:
     return response.json()
 
 
-@tool(desc="Fetch daily time series data for a stock symbol", num_cpus=1)
+@rayai.tool
 def get_daily_time_series(symbol: str) -> dict:
     """Fetch daily time series data for a stock symbol from Alpha Vantage.
+
+    ray:
+        num_cpus: 1
 
     Use this tool when the user asks about historical stock prices, daily performance,
     price trends, or wants to analyze a specific stock's trading history.
@@ -67,9 +73,12 @@ RUN pip install --no-cache-dir pandas numpy
 """
 
 
-@tool(desc="Execute Python code to analyze stock data in a secure sandbox", num_cpus=1)
+@rayai.tool
 def run_analysis_code(code: str, time_series_data: str) -> str:
     """Execute Python code to analyze stock time series data in a secure sandbox.
+
+    ray:
+        num_cpus: 1
 
     Use this tool when the user wants to perform custom analysis on stock data,
     calculate metrics, identify trends, or run computations on time series data.
