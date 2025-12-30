@@ -126,14 +126,14 @@ def example_tool(query: str) -> str:
     return f"Processed: {{query}}"
 
 
-def create_{agent_name}_agent():
+def make_agent():
     """Create and configure the LangChain agent."""
     llm = ChatOpenAI(model="gpt-4o-mini")
     return create_agent(llm, tools=[example_tool])
 
 
 # Serve the agent
-rayai.serve(create_{agent_name}_agent, name="{agent_name}", num_cpus=1, memory="2GB")
+rayai.serve(make_agent, name="{agent_name}", num_cpus=1, memory="2GB")
 '''
 
 
@@ -151,7 +151,7 @@ def example_tool(query: str) -> str:
     return f"Processed: {{query}}"
 
 
-def create_{agent_name}_agent():
+def make_agent():
     """Create and configure the Pydantic AI agent."""
     return Agent(
         "openai:gpt-4o-mini",
@@ -161,5 +161,5 @@ def create_{agent_name}_agent():
 
 
 # Serve the agent
-rayai.serve(create_{agent_name}_agent, name="{agent_name}", num_cpus=1, memory="2GB")
+rayai.serve(make_agent, name="{agent_name}", num_cpus=1, memory="2GB")
 '''

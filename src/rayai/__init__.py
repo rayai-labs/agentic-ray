@@ -22,7 +22,7 @@ import importlib.metadata
 
 from rayai.agent_base import Agent
 from rayai.base import AgentProtocol
-from rayai.batch import BatchTool, BatchToolInput, BatchToolOutput
+from rayai.batch import BatchTool, BatchToolInput, BatchToolOutput, batch_tool
 from rayai.decorators import tool
 from rayai.serve import serve
 from rayai.utils import execute_tools
@@ -37,6 +37,7 @@ __all__ = [
     "tool",  # Unified decorator/wrapper for Ray tools
     "serve",  # Serve agents via HTTP
     "Agent",  # Base class for custom agents
+    "batch_tool",
     # Supporting types
     "AgentProtocol",
     "BatchTool",
