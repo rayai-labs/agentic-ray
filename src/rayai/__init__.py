@@ -9,13 +9,9 @@ Example:
     import rayai
     from pydantic_ai import Agent
 
-    @rayai.tool
+    @rayai.tool(num_cpus=1)
     def search(query: str) -> str:
-        '''Search the web.
-
-        ray:
-            num_cpus: 1
-        '''
+        '''Search the web.'''
         return f"Results for {query}"
 
     agent = Agent("gpt-4", tools=[search])

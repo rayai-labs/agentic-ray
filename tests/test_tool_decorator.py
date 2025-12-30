@@ -42,38 +42,6 @@ class TestToolDecorator:
         assert resource_func._tool_metadata["num_cpus"] == 2
         assert resource_func._tool_metadata["memory"] == "1GB"
 
-    def test_docstring_resources(self):
-        """Resources parsed from docstring."""
-        from rayai import tool
-
-        @tool
-        def docstring_func(x: int) -> int:
-            """Multiply by 2.
-
-            ray:
-                num_cpus: 4
-                memory: 2GB
-            """
-            return x * 2
-
-        assert docstring_func._tool_metadata["num_cpus"] == 4
-        assert docstring_func._tool_metadata["memory"] == "2GB"
-
-    def test_decorator_args_override_docstring(self):
-        """Decorator args take precedence over docstring."""
-        from rayai import tool
-
-        @tool(num_cpus=8)
-        def override_func(x: int) -> int:
-            """Test.
-
-            ray:
-                num_cpus: 2
-            """
-            return x * 2
-
-        assert override_func._tool_metadata["num_cpus"] == 8
-
     def test_preserves_function_metadata(self):
         """Preserves __name__ and __doc__."""
         from rayai import tool

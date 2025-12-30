@@ -9,11 +9,7 @@ Example:
     # As decorator for custom functions
     @rayai.tool
     def search(query: str) -> str:
-        '''Search the web.
-
-        ray:
-            num_cpus: 1
-        '''
+        '''Search the web.'''
         return results
 
     # As decorator with explicit resources
@@ -36,7 +32,6 @@ from typing import Any, overload
 import ray
 
 from rayai.resource_loader import _parse_memory
-from rayai.resource_parser import parse_all_ray_resources
 
 
 @overload
@@ -76,23 +71,10 @@ def tool(
         @rayai.tool
         def my_func(): ...
 
-        wrapped = rayai.tool(LangChainTool())
-
-    Resources can be specified via decorator args or docstring:
         @rayai.tool(num_cpus=2, memory="4GB")
         def my_func(): ...
 
-        # Or via docstring:
-        @rayai.tool
-        def my_func():
-            '''My function.
-
-            ray:
-                num_cpus: 2
-                memory: 4GB
-            '''
-
-    Decorator args take precedence over docstring resources.
+        wrapped = rayai.tool(LangChainTool())
 
     Args:
         func: Function to wrap, or a framework tool instance.
@@ -111,15 +93,10 @@ def tool(
         if not ray.is_initialized():
             ray.init()
 
-        # Parse resources from docstring (fallback to decorator args)
-        doc_resources = parse_all_ray_resources(fn.__doc__)
-        resolved_cpus = (
-            num_cpus if num_cpus is not None else doc_resources.get("num_cpus", 1)
-        )
-        resolved_gpus = (
-            num_gpus if num_gpus is not None else doc_resources.get("num_gpus", 0)
-        )
-        resolved_memory = memory if memory is not None else doc_resources.get("memory")
+        # Use decorator args or defaults
+        resolved_cpus = num_cpus if num_cpus is not None else 1
+        resolved_gpus = num_gpus if num_gpus is not None else 0
+        resolved_memory = memory
 
         # Build Ray options
         ray_options: dict[str, Any] = {

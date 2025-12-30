@@ -18,7 +18,6 @@ Tests protect against regressions when modifying the core runtime and validate t
 
 - `test_batch_tool.py` - BatchTool parallel execution tests
 - `test_tool_decorator.py` - `@rayai.tool` decorator tests
-- `test_resource_parser.py` - Docstring resource parsing tests
 - `test_serve.py` - `rayai.serve()` registration tests
 - `test_sandbox.py` - Sandbox execution tests
 - `test_code_interpreter.py` - Code interpreter tests

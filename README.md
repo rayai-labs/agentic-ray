@@ -92,13 +92,9 @@ After running `rayai create-agent my_agent --framework pydantic`, edit `agents/m
 import rayai
 from pydantic_ai import Agent
 
-@rayai.tool
+@rayai.tool(num_cpus=1)
 def search(query: str) -> str:
-    """Search for information.
-
-    ray:
-        num_cpus: 1
-    """
+    """Search for information."""
     return f"Results for: {query}"
 
 # Create Pydantic AI agent with Ray-distributed tools
@@ -134,15 +130,10 @@ Creates a Ray-distributed async tool from a function. Works as both a decorator 
 ```python
 import rayai
 
-# As decorator with docstring resources
+# As decorator (uses defaults: num_cpus=1, num_gpus=0)
 @rayai.tool
 def search(query: str) -> str:
-    """Search for information.
-
-    ray:
-        num_cpus: 1
-        memory: 1GB
-    """
+    """Search for information."""
     return f"Results for: {query}"
 
 # As decorator with explicit resources
@@ -160,14 +151,6 @@ lc_search = rayai.tool(DuckDuckGoSearchRun())
 | `num_cpus` | int/float | 1 | CPU cores per invocation |
 | `num_gpus` | int/float | 0 | GPUs per invocation |
 | `memory` | str | None | Memory requirement (e.g., "1GB") |
-
-Resources can also be specified in docstrings:
-```
-ray:
-    num_cpus: 2
-    num_gpus: 1
-    memory: 4GB
-```
 
 ### `rayai.serve()`
 

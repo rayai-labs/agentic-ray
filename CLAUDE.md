@@ -21,13 +21,9 @@ import rayai
 from pydantic_ai import Agent
 
 # Unified tool decorator - works with any framework
-@rayai.tool
+@rayai.tool(num_cpus=1)
 def search(query: str) -> str:
-    """Search the web.
-
-    ray:
-        num_cpus: 1
-    """
+    """Search the web."""
     return f"Results for {query}"
 
 # Create agent with your preferred framework

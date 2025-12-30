@@ -80,13 +80,9 @@ import rayai
 from rayai import Agent
 
 
-@rayai.tool
+@rayai.tool(num_cpus=1)
 def example_tool(query: str) -> str:
-    """Process a query and return a result.
-
-    ray:
-        num_cpus: 1
-    """
+    """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
@@ -124,13 +120,9 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
 
-@rayai.tool
+@rayai.tool(num_cpus=1)
 def example_tool(query: str) -> str:
-    """Process a query and return a result.
-
-    ray:
-        num_cpus: 1
-    """
+    """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
@@ -153,13 +145,9 @@ import rayai
 from pydantic_ai import Agent
 
 
-@rayai.tool
+@rayai.tool(num_cpus=1)
 def example_tool(query: str) -> str:
-    """Process a query and return a result.
-
-    ray:
-        num_cpus: 1
-    """
+    """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 

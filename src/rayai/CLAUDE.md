@@ -12,7 +12,6 @@ It is the heart of the system and provides the foundational abstractions for bui
 - `decorators.py` - Unified `@tool` decorator for Ray-distributed tool execution
 - `serve.py` - `rayai.serve()` function for serving agents via HTTP
 - `agent_base.py` - `rayai.Agent` base class for custom agents
-- `resource_parser.py` - Parse resource hints from docstrings (`ray: num_cpus=1`)
 - `batch.py` - Generic `BatchTool` for parallel execution of any registered tool
 - `cli/` - Command-line interface for agent management (init, create-agent, up, analytics)
 - `sandbox/` - Secure code execution with Docker/gVisor
@@ -29,11 +28,7 @@ import rayai
 # As decorator for custom functions
 @rayai.tool
 def search(query: str) -> str:
-    """Search the web.
-
-    ray:
-        num_cpus: 1
-    """
+    """Search the web."""
     return results
 
 # As decorator with explicit resources
@@ -74,7 +69,6 @@ class MyAgent(Agent):
 - Sandbox execution must stay isolated; do not allow host-level operations unless explicitly whitelisted
 - This layer should be lightweight and dependency-minimal
 - **`@rayai.tool`**: Unified decorator/wrapper that works as both decorator and framework tool wrapper
-- **Docstring resources**: Parse `ray:` block from docstrings for resource hints
 - **Async-first tools**: Tools return awaitables for non-blocking parallel execution via `asyncio.gather()`
 - **`rayai.serve()`**: Hybrid serve/register - blocks in main, registers when imported by `rayai up`
 - **`rayai.Agent`**: Base class for custom agents without frameworks
@@ -97,7 +91,6 @@ class MyAgent(Agent):
 - Maintain clarity in serialization and Ray task signatures
 - Expand sandbox capabilities cautiously with security in mind
 - Keep dependencies minimal in core modules
-- Use docstring resources for tool configuration
 - Use `rayai.serve()` for agent deployment
 
 ### ❌ Don't:
