@@ -1,5 +1,7 @@
 """Tests for BatchTool."""
 
+from typing import Any
+
 from rayai import BatchTool, BatchToolInput, BatchToolOutput
 from rayai.decorators import tool
 
@@ -115,22 +117,26 @@ class TestBatchTool:
             description="My custom batch tool",
         )
 
-        assert batch_tool.name == "custom_batch"
-        assert batch_tool.description == "My custom batch tool"
+        assert batch_tool.__name__ == "custom_batch"
+        assert batch_tool.__doc__ == "My custom batch tool"
 
     def test_tool_metadata(self, ray_start):
-        """Test that BatchTool has proper metadata for framework detection."""
+        """Test that batch_tool function has proper metadata for framework detection."""
 
         @tool
         def test_tool(x: int) -> int:
             return x
 
-        batch_tool = BatchTool(tools=[test_tool])
+        batch_tool = BatchTool(tools=[test_tool], name="my_batch")
 
-        assert hasattr(batch_tool, "_tool_metadata")
-        assert batch_tool._tool_metadata["is_batch_tool"] is True
-        assert hasattr(batch_tool, "args_schema")
-        assert batch_tool.args_schema == BatchToolInput
+        # Function has standard attributes for framework introspection
+        assert callable(batch_tool)
+        assert batch_tool.__name__ == "my_batch"
+        assert batch_tool.__annotations__ == {
+            "tool_name": str,
+            "tool_inputs": list[dict[str, Any]],
+            "return": dict[str, Any],
+        }
 
 
 class TestBatchToolInputOutput:
