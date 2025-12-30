@@ -56,11 +56,11 @@ class Agent(ABC):
         """
         raise NotImplementedError
 
-    async def call_tool(self, name: str, **kwargs: Any) -> Any:
+    async def call_tool(self, tool_name: str, **kwargs: Any) -> Any:
         """Call a registered tool by name.
 
         Args:
-            name: Name of the tool to call.
+            tool_name: Name of the tool to call.
             **kwargs: Arguments to pass to the tool.
 
         Returns:
@@ -69,7 +69,7 @@ class Agent(ABC):
         Raises:
             ValueError: If tool is not found.
         """
-        tool = self._find_tool(name)
+        tool = self._find_tool(tool_name)
         return await self._execute_tool(tool, **kwargs)
 
     async def call_tools_parallel(

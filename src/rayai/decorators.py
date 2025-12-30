@@ -254,23 +254,19 @@ def _wrap_framework_tool(
 
 def _extract_langchain_callable(lc_tool: Any) -> Callable[..., Any]:
     """Extract the underlying callable from a LangChain tool."""
-    # LangChain tools have _run or _arun methods
-    fn: Callable[..., Any]
-    if hasattr(lc_tool, "_run"):
-        fn = lc_tool._run
-    elif hasattr(lc_tool, "run"):
-        fn = lc_tool.run
-    else:
-        # Fall back to calling the tool directly
-        fn = lc_tool
+    tool_name = getattr(lc_tool, "name", type(lc_tool).__name__)
+    tool_desc = getattr(lc_tool, "description", None)
 
-    # Preserve metadata
-    if not hasattr(fn, "__name__"):
-        fn.__name__ = getattr(lc_tool, "name", type(lc_tool).__name__)
-    if not hasattr(fn, "__doc__") or fn.__doc__ is None:
-        fn.__doc__ = getattr(lc_tool, "description", None)
+    def lc_wrapper(input: Any = None, **kwargs: Any) -> Any:
+        if input is not None:
+            return lc_tool.invoke(input, **kwargs)
+        return lc_tool.invoke(**kwargs)
 
-    return fn
+    lc_wrapper.__name__ = tool_name
+    lc_wrapper.__qualname__ = tool_name
+    lc_wrapper.__doc__ = tool_desc
+
+    return lc_wrapper
 
 
 def _extract_pydantic_callable(pydantic_tool: Any) -> Callable[..., Any]:

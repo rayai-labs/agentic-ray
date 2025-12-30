@@ -250,18 +250,16 @@ def _start_serve(
                 "num_gpus": config.num_gpus,
                 "memory": _parse_memory(config.memory),
             },
-            route_prefix=config.route_prefix,
         )
-        deployments.append(deployment)
+        deployments.append((deployment, config.route_prefix))
 
     # Start Ray Serve
     ray_serve.start(http_options={"host": host, "port": port})
 
-    # Deploy all agents
-    for deployment in deployments:
-        ray_serve.run(deployment, _blocking=False)
+    for (deployment, route_prefix), config in zip(deployments, configs, strict=False):
+        ray_serve.run(deployment, route_prefix=route_prefix, name=config.name)
 
-    print(f"\n🚀 RayAI serving {len(configs)} agent(s) at http://{host}:{port}")
+    print(f"\n RayAI serving {len(configs)} agent(s) at http://{host}:{port}")
     for config in configs:
         print(f"   • {config.name}: {config.route_prefix}")
     print("\nPress Ctrl+C to stop.\n")
@@ -290,7 +288,6 @@ def _create_agent_deployment(
     name: str,
     replicas: int,
     ray_actor_options: dict[str, Any],
-    route_prefix: str,
 ):
     """Create a Ray Serve deployment for an agent.
 
@@ -301,31 +298,29 @@ def _create_agent_deployment(
         name: Deployment name.
         replicas: Number of replicas.
         ray_actor_options: Ray actor options.
-        route_prefix: URL prefix.
 
     Returns:
         Ray Serve deployment.
     """
     from ray import serve as ray_serve
 
-    app = FastAPI(title=f"{name} Agent")
-
-    # Detect agent type and create appropriate runner
-    runner = _create_agent_runner(agent)
+    app = FastAPI(title=f"{name} Agent", redirect_slashes=False)
 
     @ray_serve.deployment(
         name=f"{name}-deployment",
         num_replicas=replicas,
         ray_actor_options=ray_actor_options,
-        route_prefix=route_prefix,
     )
     @ray_serve.ingress(app)
     class AgentDeployment:
-        def __init__(self):
-            self.runner = runner
-            self.agent = agent
+        def __init__(self, agent_or_factory: Any):
+            if callable(agent_or_factory) and not _is_agent_instance(agent_or_factory):
+                self.agent = agent_or_factory()
+            else:
+                self.agent = agent_or_factory
+            self.runner = _create_agent_runner(self.agent)
 
-        @app.post("/")
+        @app.post("/", response_model=None)
         async def chat(self, request: ChatRequest) -> ChatResponse | StreamingResponse:
             try:
                 if request.stream:
@@ -359,7 +354,7 @@ def _create_agent_deployment(
         async def health(self):
             return {"status": "healthy", "agent": name}
 
-    return AgentDeployment.bind()  # type: ignore[attr-defined]
+    return AgentDeployment.bind(agent)  # type: ignore[attr-defined]
 
 
 class _AgentRunner:
@@ -405,22 +400,27 @@ class _AgentRunner:
     async def _run_pydantic_ai(self, query: str) -> str:
         """Run a Pydantic AI agent."""
         result = await self.agent.run(query)
-        return str(result.data)
+        return str(result.output)
 
     async def _run_langchain(self, query: str) -> str:
         """Run a LangChain agent."""
-        # LangChain agents can be invoked with invoke() or ainvoke()
+        from langchain_core.messages import HumanMessage
+
+        input_data = {"messages": [HumanMessage(content=query)]}
+
         if hasattr(self.agent, "ainvoke"):
-            result = await self.agent.ainvoke({"input": query})
+            result = await self.agent.ainvoke(input_data)
         elif hasattr(self.agent, "invoke"):
-            result = self.agent.invoke({"input": query})
+            result = self.agent.invoke(input_data)
         else:
             result = self.agent(query)
 
-        # Extract output
-        if isinstance(result, dict):
-            output = result.get("output", str(result))
-            return str(output)
+        if isinstance(result, dict) and "messages" in result:
+            messages = result["messages"]
+            if messages:
+                last_message = messages[-1]
+                if hasattr(last_message, "content"):
+                    return str(last_message.content)
         return str(result)
 
     async def _run_rayai(self, query: str) -> str:
@@ -490,6 +490,17 @@ def _is_rayai_agent(obj: Any) -> bool:
         return isinstance(obj, Agent)
     except ImportError:
         return False
+
+
+def _is_agent_instance(obj: Any) -> bool:
+    """Check if obj is an agent instance (not a factory function).
+
+    Returns True if obj is a known agent type (Pydantic AI, LangChain, rayai.Agent).
+    Returns False if obj appears to be a factory function.
+    """
+    return (
+        _is_pydantic_ai_agent(obj) or _is_langchain_agent(obj) or _is_rayai_agent(obj)
+    )
 
 
 async def _stream_generator(async_gen):

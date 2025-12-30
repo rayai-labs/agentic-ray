@@ -134,12 +134,14 @@ def example_tool(query: str) -> str:
     return f"Processed: {{query}}"
 
 
-# Create LangChain agent with Ray-distributed tools
-llm = ChatOpenAI(model="gpt-4o-mini")
-agent = create_agent(llm, tools=[example_tool])
+def create_{agent_name}_agent():
+    """Create and configure the LangChain agent."""
+    llm = ChatOpenAI(model="gpt-4o-mini")
+    return create_agent(llm, tools=[example_tool])
+
 
 # Serve the agent
-rayai.serve(agent, name="{agent_name}", num_cpus=1, memory="2GB")
+rayai.serve(create_{agent_name}_agent, name="{agent_name}", num_cpus=1, memory="2GB")
 '''
 
 
@@ -161,13 +163,15 @@ def example_tool(query: str) -> str:
     return f"Processed: {{query}}"
 
 
-# Create Pydantic AI agent with Ray-distributed tools
-agent = Agent(
-    "openai:gpt-4o-mini",
-    system_prompt="You are a helpful assistant.",
-    tools=[example_tool],
-)
+def create_{agent_name}_agent():
+    """Create and configure the Pydantic AI agent."""
+    return Agent(
+        "openai:gpt-4o-mini",
+        system_prompt="You are a helpful assistant.",
+        tools=[example_tool],
+    )
+
 
 # Serve the agent
-rayai.serve(agent, name="{agent_name}", num_cpus=1, memory="2GB")
+rayai.serve(create_{agent_name}_agent, name="{agent_name}", num_cpus=1, memory="2GB")
 '''
