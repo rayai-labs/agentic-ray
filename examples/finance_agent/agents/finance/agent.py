@@ -7,7 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 
-from rayai import agent
+import rayai
 
 # Load .env from example directory
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -48,40 +48,12 @@ After running analysis, provide a clear summary including:
 Keep summaries concise but informative. Focus on actionable insights.
 """
 
+# Create Pydantic AI agent with Ray-distributed tools
+agent = Agent(
+    "openai:gpt-4o",
+    system_prompt=SYSTEM_PROMPT,
+    tools=[get_sp500, get_daily_time_series, run_analysis_code],
+)
 
-@agent(num_cpus=1, memory="1GB")
-class FinanceAgent:
-    """Finance analyst agent with Ray distributed tools."""
-
-    def __init__(self):
-        self.pydantic_agent = Agent(
-            "openai:gpt-4o",
-            system_prompt=SYSTEM_PROMPT,
-            tools=[get_sp500, get_daily_time_series, run_analysis_code],
-        )
-
-    async def run(self, data: dict) -> dict:
-        """Execute the finance agent.
-
-        Args:
-            data: Input data in OpenAI Chat API format
-
-        Returns:
-            Dict with 'response' key containing agent output
-        """
-        messages = data.get("messages", [])
-        if not messages:
-            return {"error": "No messages provided"}
-
-        # Get the last user message
-        current_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                current_message = msg.get("content", "")
-                break
-
-        if not current_message:
-            return {"error": "No user message found"}
-
-        result = await self.pydantic_agent.run(current_message)
-        return {"response": result.output}
+# Serve the agent with Ray Serve
+rayai.serve(agent, name="finance", num_cpus=1, memory="1GB")

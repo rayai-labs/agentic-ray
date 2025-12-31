@@ -1,5 +1,7 @@
 """Tests for BatchTool."""
 
+from typing import Any
+
 from rayai import BatchTool, BatchToolInput, BatchToolOutput
 from rayai.decorators import tool
 
@@ -10,7 +12,7 @@ class TestBatchTool:
     def test_basic_batch_execution(self, ray_start):
         """Test basic parallel execution."""
 
-        @tool(desc="Double a number")
+        @tool
         def double(x: int) -> int:
             return x * 2
 
@@ -27,7 +29,7 @@ class TestBatchTool:
     def test_empty_inputs(self, ray_start):
         """Test handling empty inputs."""
 
-        @tool(desc="Test")
+        @tool
         def test_tool(x: int) -> int:
             return x
 
@@ -50,7 +52,7 @@ class TestBatchTool:
     def test_partial_errors(self, ray_start):
         """Test handling of partial execution errors."""
 
-        @tool(desc="May fail")
+        @tool
         def may_fail(x: int) -> int:
             if x < 0:
                 raise ValueError("Negative not allowed")
@@ -71,11 +73,11 @@ class TestBatchTool:
     def test_multiple_tools(self, ray_start):
         """Test BatchTool with multiple registered tools."""
 
-        @tool(desc="Add one")
+        @tool
         def add_one(x: int) -> int:
             return x + 1
 
-        @tool(desc="Multiply by two")
+        @tool
         def multiply_two(x: int) -> int:
             return x * 2
 
@@ -90,7 +92,7 @@ class TestBatchTool:
     def test_multi_param_tool(self, ray_start):
         """Test tool with multiple parameters."""
 
-        @tool(desc="Add two numbers")
+        @tool
         def add(a: int, b: int) -> int:
             return a + b
 
@@ -105,7 +107,7 @@ class TestBatchTool:
     def test_custom_name_and_description(self, ray_start):
         """Test custom name and description."""
 
-        @tool(desc="Test")
+        @tool
         def test_tool(x: int) -> int:
             return x
 
@@ -115,22 +117,26 @@ class TestBatchTool:
             description="My custom batch tool",
         )
 
-        assert batch_tool.name == "custom_batch"
-        assert batch_tool.description == "My custom batch tool"
+        assert batch_tool.__name__ == "custom_batch"
+        assert batch_tool.__doc__ == "My custom batch tool"
 
     def test_tool_metadata(self, ray_start):
-        """Test that BatchTool has proper metadata for framework detection."""
+        """Test that batch_tool function has proper metadata for framework detection."""
 
-        @tool(desc="Test")
+        @tool
         def test_tool(x: int) -> int:
             return x
 
-        batch_tool = BatchTool(tools=[test_tool])
+        batch_tool = BatchTool(tools=[test_tool], name="my_batch")
 
-        assert hasattr(batch_tool, "_tool_metadata")
-        assert batch_tool._tool_metadata["is_batch_tool"] is True
-        assert hasattr(batch_tool, "args_schema")
-        assert batch_tool.args_schema == BatchToolInput
+        # Function has standard attributes for framework introspection
+        assert callable(batch_tool)
+        assert batch_tool.__name__ == "my_batch"
+        assert batch_tool.__annotations__ == {
+            "tool_name": str,
+            "tool_inputs": list[dict[str, Any]],
+            "return": dict[str, Any],
+        }
 
 
 class TestBatchToolInputOutput:
@@ -167,38 +173,6 @@ class TestBatchToolInputOutput:
         assert dumped["count"] == 1
 
 
-class TestBatchToolConversion:
-    """Tests for BatchTool framework conversion."""
-
-    def test_to_raytool_conversion(self, ray_start):
-        """Test conversion to RayTool."""
-        from rayai.adapters.core import to_raytool
-
-        @tool(desc="Test")
-        def test_tool(x: int) -> int:
-            return x
-
-        batch_tool = BatchTool(tools=[test_tool])
-        ray_tool = to_raytool(batch_tool)
-
-        assert ray_tool.name == "batch"
-        assert ray_tool.source_framework == "batch_tool"
-        assert ray_tool.args_schema == BatchToolInput
-
-    def test_detect_framework(self, ray_start):
-        """Test framework detection for BatchTool."""
-        from rayai.adapters.core import SourceFramework, detect_framework
-
-        @tool(desc="Test")
-        def test_tool(x: int) -> int:
-            return x
-
-        batch_tool = BatchTool(tools=[test_tool])
-        detected = detect_framework(batch_tool)
-
-        assert detected == SourceFramework.RAY_TOOL
-
-
 class TestBatchToolWithPlainCallables:
     """Tests for BatchTool with plain callable functions."""
 
@@ -217,7 +191,7 @@ class TestBatchToolWithPlainCallables:
     def test_mixed_tools(self, ray_start):
         """Test BatchTool with both decorated and plain functions."""
 
-        @tool(desc="Decorated")
+        @tool
         def decorated(x: int) -> int:
             return x + 1
 

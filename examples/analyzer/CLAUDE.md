@@ -108,6 +108,5 @@ cd examples/analyzer/token_efficient_agent
 
 ## Related Modules
 - `src/rayai/sandbox/` - Sandbox execution system
-- `src/rayai/adapters/` - Framework adapters (if using LangChain/Pydantic AI)
 - `examples/CLAUDE.md` - General examples documentation
 

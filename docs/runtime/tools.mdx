@@ -3,40 +3,82 @@ title: "Tools"
 description: "Run tools as distributed Ray tasks"
 ---
 
-The `@tool` decorator converts Python functions into [Ray tasks](https://docs.ray.io/en/latest/ray-core/tasks.html) that execute in parallel across your cluster.
+The `@rayai.tool` decorator converts Python functions into async [Ray tasks](https://docs.ray.io/en/latest/ray-core/tasks.html) that execute across your cluster.
 
 ```python
-from rayai import tool
+import rayai
 
-@tool(desc="Analyze data with heavy computation", num_cpus=2, memory="4GB")
-def analyze_data(dataset: str) -> dict:
+@rayai.tool(num_cpus=2, memory="4GB")
+async def analyze_data(dataset: str) -> dict:
+    """Analyze data with heavy computation."""
     # This runs as a Ray task with 2 CPUs and 4GB memory
     return {"result": "analysis complete"}
 ```
 
-When you call `analyze_data()`, RayAI:
+You can also import the decorator directly:
+
+```python
+from rayai import tool
+
+@tool(num_cpus=1)
+def search(query: str) -> str:
+    """Search for information."""
+    return f"Results for: {query}"
+```
+
+When you call a tool, RayAI:
 1. Submits the function as a Ray remote task
 2. Allocates the specified resources (CPUs, GPUs, memory)
-3. Waits for the result and returns it
+3. Returns an awaitable that resolves to the result
+
+## Calling Tools
+
+Tools are async and must be awaited:
+
+```python
+# Single tool call
+result = await analyze_data("my_dataset")
+```
 
 ## Parallel Execution
 
-Multiple tool calls execute in parallel automatically:
+Use `asyncio.gather()` to run multiple tools in parallel:
 
 ```python
-# These run concurrently on Ray
-results = [
+import asyncio
+
+# These run concurrently on Ray workers
+results = await asyncio.gather(
     analyze_data("dataset_1"),
     analyze_data("dataset_2"),
     analyze_data("dataset_3"),
-]
+)
 ```
+
+## Wrapping Framework Tools
+
+Use `rayai.tool()` as a wrapper to run framework tools on Ray:
+
+```python
+import rayai
+from langchain_community.tools import DuckDuckGoSearchRun
+
+# Wrap a LangChain tool for Ray execution
+search = rayai.tool(DuckDuckGoSearchRun(), num_cpus=1)
+
+# Now it executes on Ray workers
+result = await search("Python tutorials")
+```
+
 
 ## Resource Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `desc` | str | Function docstring | Description for LLM schema generation |
-| `num_cpus` | int | 1 | CPU cores per task |
-| `num_gpus` | int | 0 | GPUs per task |
+| `num_cpus` | int/float | 1 | CPU cores per task |
+| `num_gpus` | int/float | 0 | GPUs per task |
 | `memory` | str | None | Memory limit (e.g., "4GB", "512MB") |
+
+<Info>
+Tool descriptions for LLM schema generation come from the function's docstring.
+</Info>

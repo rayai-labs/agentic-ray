@@ -10,14 +10,17 @@ Instead of calling a tool 50 times (e.g., `web_search`, `grep`, `update_row`), t
 ## Usage
 
 ```python
-from rayai import tool, BatchTool
+import rayai
+from rayai import BatchTool
 
-@tool(desc="Look up information about a topic")
+@rayai.tool
 def lookup_topic(topic: str) -> str:
+    """Look up information about a topic."""
     return f"Information about {topic}"
 
-@tool(desc="Translate text")
+@rayai.tool
 def translate(text: str, target_lang: str) -> str:
+    """Translate text to another language."""
     return f"Translated '{text}' to {target_lang}"
 
 # Create batch tool with your tools
@@ -42,28 +45,26 @@ result = batch_tool(
 # }
 ```
 
-### With LangChain Agent
+### With Pydantic AI
+
+BatchTool returns a plain callable that works with any agent framework:
 
 ```python
-from langchain.agents import create_agent
+import rayai
+from rayai import BatchTool
+from pydantic_ai import Agent
 
-from rayai import tool, BatchTool
-from rayai.adapters import RayToolWrapper, AgentFramework
-
-@tool(desc="Search Wikipedia")
-def search_wiki(query: str) -> str:
-    # Your implementation
+@rayai.tool
+def search(query: str) -> str:
+    """Search for information."""
     return f"Results for {query}"
 
-# Create batch tool
-batch_tool = BatchTool(tools=[search_wiki])
+batch_search = BatchTool(tools=[search], name="batch_search")
 
-# Convert to LangChain format
-wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
-[lc_batch_tool] = wrapper.wrap_tools([batch_tool])
+def make_agent():
+    return Agent("openai:gpt-4o-mini", tools=[batch_search])
 
-# Create LangChain agent (requires OPENAI_API_KEY env var)
-agent = create_agent(model="openai:gpt-4o-mini", tools=[lc_batch_tool])
+rayai.serve(make_agent, name="search-agent")
 ```
 
 ## Input & Output
@@ -88,10 +89,9 @@ agent = create_agent(model="openai:gpt-4o-mini", tools=[lc_batch_tool])
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `tools` | `list[Callable \| RayTool] \| None` | List of tools to register |
+| `tools` | `list[Callable]` | List of tools to register |
 | `name` | `str` | Tool name (default: "batch") |
 | `description` | `str` | Custom description |
-| `validate_inputs` | `bool` | Validate inputs against schema (default: True) |
 
 <Info>
 BatchTool handles partial failures gracefully. If some inputs fail, others still return results. Check the `errors` list to see which inputs failed.

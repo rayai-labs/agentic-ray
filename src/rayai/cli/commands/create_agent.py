@@ -47,8 +47,8 @@ def create_agent(agent_name: str, framework: str):
 
         click.echo("\nNext steps:")
         click.echo(f"  Edit agents/{agent_name}/agent.py to implement your logic")
-        click.echo("  Run with: rayai serve")
-        click.echo(f"  Test at: POST http://localhost:8000/agents/{agent_name}/chat")
+        click.echo("  Run with: rayai up")
+        click.echo(f"  Test at: POST http://localhost:8000/{agent_name}")
 
     except Exception as e:
         click.echo(f"Error: Failed to create agent: {e}")
@@ -76,67 +76,37 @@ def _get_python_template(agent_name: str) -> str:
     """Get pure Python agent template."""
     return f'''"""Pure Python agent implementation for {agent_name}."""
 
-from rayai import agent, tool, execute_tools
+import rayai
+from rayai import Agent
 
 
-# Define tools with resource requirements
-@tool(desc="Example tool - replace with your own", num_cpus=1)
+@rayai.tool(num_cpus=1)
 def example_tool(query: str) -> str:
     """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
-@agent(num_cpus=1, memory="2GB")
-class {agent_name.title().replace("_", "")}:
+class {agent_name.title().replace("_", "")}(Agent):
     """Agent implementation using pure Python."""
 
-    def __init__(self):
-        # Store tools for this agent
-        self.tools = [example_tool]
+    tools = [example_tool]
 
-    def run(self, data: dict) -> dict:
+    async def run(self, query: str) -> str:
         """Execute the agent.
 
         Args:
-            data: OpenAI Chat API format:
-                {{"messages": [
-                    {{"role": "system", "content": "..."}},
-                    {{"role": "user", "content": "..."}},
-                    {{"role": "assistant", "content": "..."}},
-                    ...
-                ]}}
+            query: User's input query
 
         Returns:
-            Dict with 'response' key containing agent output
+            Agent's response
         """
-        messages = data.get("messages", [])
-        if not messages:
-            return {{"error": "No messages provided"}}
+        # Example: Call a tool
+        result = await self.call_tool("example_tool", query=query)
+        return f"Agent response: {{result}}"
 
-        # Get the last user message
-        user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
 
-        if not user_message:
-            return {{"error": "No user message found"}}
-
-        # Example: Execute tools (can be parallel or sequential)
-        # results = execute_tools([(example_tool, {{"query": user_message}})], parallel=False)
-
-        # Your implementation here:
-        # - Use messages for full conversation context
-        # - Parse the user message
-        # - Decide which tools to call
-        # - Execute tools and aggregate results
-        # - Return response
-
-        return {{
-            "response": f"Received: {{user_message}}",
-            "status": "success"
-        }}
+# Serve the agent
+rayai.serve({agent_name.title().replace("_", "")}, name="{agent_name}", num_cpus=1, memory="2GB")
 '''
 
 
@@ -144,68 +114,25 @@ def _get_langchain_template(agent_name: str) -> str:
     """Get LangChain agent template."""
     return f'''"""LangChain agent implementation for {agent_name}."""
 
+import rayai
 from langchain.agents import create_agent
-
-from rayai import agent, tool
-from rayai.adapters import AgentFramework, RayToolWrapper
+from langchain_openai import ChatOpenAI
 
 
-# Define tools with resource requirements
-@tool(desc="Example tool - replace with your own", num_cpus=1)
+@rayai.tool(num_cpus=1)
 def example_tool(query: str) -> str:
     """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
-@agent(num_cpus=1, memory="2GB")
-class {agent_name.title().replace("_", "")}:
-    """Agent implementation using LangChain."""
+def make_agent():
+    """Create and configure the LangChain agent."""
+    llm = ChatOpenAI(model="gpt-4o-mini")
+    return create_agent(llm, tools=[example_tool])
 
-    def __init__(self):
-        # Store Ray tools
-        self.tools = [example_tool]
 
-        # Wrap Ray tools for LangChain compatibility
-        wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
-        lc_tools = wrapper.wrap_tools(self.tools)
-
-        # Create LangChain agent (requires OPENAI_API_KEY env var)
-        self.lc_agent = create_agent(
-            model="openai:gpt-4o-mini",
-            tools=lc_tools,
-            system_prompt="You are a helpful assistant.",
-        )
-
-    async def run(self, data: dict) -> dict:
-        """Execute the LangChain agent.
-
-        Args:
-            data: OpenAI Chat API format:
-                {{"messages": [
-                    {{"role": "system", "content": "..."}},
-                    {{"role": "user", "content": "..."}},
-                    {{"role": "assistant", "content": "..."}},
-                    ...
-                ]}}
-
-        Returns:
-            Dict with 'response' key containing agent output
-        """
-        messages = data.get("messages", [])
-        if not messages:
-            return {{"error": "No messages provided"}}
-
-        # Run the agent with OpenAI-format messages
-        result = await self.lc_agent.ainvoke({{"messages": messages}})
-
-        # Extract the final response
-        agent_messages = result.get("messages", [])
-        if agent_messages:
-            response = agent_messages[-1].content
-        else:
-            response = "No response generated"
-
-        return {{"response": response}}
+# Serve the agent
+rayai.serve(make_agent, name="{agent_name}", num_cpus=1, memory="2GB")
 '''
 
 
@@ -213,85 +140,25 @@ def _get_pydantic_template(agent_name: str) -> str:
     """Get Pydantic AI agent template."""
     return f'''"""Pydantic AI agent implementation for {agent_name}."""
 
+import rayai
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
-
-from rayai import agent, tool
-from rayai.adapters import AgentFramework, RayToolWrapper
 
 
-# Define tools with resource requirements
-@tool(desc="Example tool - replace with your own", num_cpus=1)
+@rayai.tool(num_cpus=1)
 def example_tool(query: str) -> str:
     """Process a query and return a result."""
     return f"Processed: {{query}}"
 
 
-@agent(num_cpus=1, memory="2GB")
-class {agent_name.title().replace("_", "")}:
-    """Agent implementation using Pydantic AI."""
+def make_agent():
+    """Create and configure the Pydantic AI agent."""
+    return Agent(
+        "openai:gpt-4o-mini",
+        system_prompt="You are a helpful assistant.",
+        tools=[example_tool],
+    )
 
-    def __init__(self):
-        # Store Ray tools
-        self.tools = [example_tool]
 
-        # Wrap Ray tools for Pydantic AI compatibility
-        wrapper = RayToolWrapper(framework=AgentFramework.PYDANTIC)
-        pydantic_tools = wrapper.wrap_tools(self.tools)
-
-        # Create Pydantic AI agent (requires OPENAI_API_KEY env var)
-        self.pydantic_agent = Agent(
-            "openai:gpt-4o-mini",
-            system_prompt="You are a helpful assistant.",
-            tools=pydantic_tools,
-        )
-
-    def _convert_to_pydantic_history(self, messages: list[dict]) -> list[ModelMessage]:
-        """Convert OpenAI format messages to Pydantic AI format."""
-        history: list[ModelMessage] = []
-        for msg in messages[:-1]:  # Exclude last message (will be current prompt)
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            if role == "user":
-                history.append(ModelRequest(parts=[UserPromptPart(content=content)]))
-            elif role == "assistant":
-                history.append(ModelResponse(parts=[TextPart(content=content)]))
-        return history
-
-    async def run(self, data: dict) -> dict:
-        """Execute the Pydantic AI agent.
-
-        Args:
-            data: OpenAI Chat API format:
-                {{"messages": [
-                    {{"role": "system", "content": "..."}},
-                    {{"role": "user", "content": "..."}},
-                    {{"role": "assistant", "content": "..."}},
-                    ...
-                ]}}
-
-        Returns:
-            Dict with 'response' key containing agent output
-        """
-        messages = data.get("messages", [])
-        if not messages:
-            return {{"error": "No messages provided"}}
-
-        # Get the last user message as the current prompt
-        current_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                current_message = msg.get("content", "")
-                break
-
-        if not current_message:
-            return {{"error": "No user message found"}}
-
-        # Convert history (all messages except last user message)
-        message_history = self._convert_to_pydantic_history(messages)
-
-        # Run the agent
-        result = await self.pydantic_agent.run(current_message, message_history=message_history)
-
-        return {{"response": result.output}}
+# Serve the agent
+rayai.serve(make_agent, name="{agent_name}", num_cpus=1, memory="2GB")
 '''

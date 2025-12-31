@@ -61,5 +61,4 @@ Financial analysis agent that:
 ## Related Modules
 
 - Relies on `src/rayai/` runtime APIs
-- Uses adapters from `src/rayai/adapters/` for framework integration
 - May use sandbox from `src/rayai/sandbox/` for code execution

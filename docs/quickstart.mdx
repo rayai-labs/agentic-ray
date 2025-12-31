@@ -35,40 +35,36 @@ cd my_project
 This generates a project structure with:
 - `agents/` - Directory for your agent code
 - `pyproject.toml` - Project dependencies
-- `.env` - Environment variables (API keys, etc.)
+- `.env.example` - Template for environment variables (copy to `.env`)
 
 </Step>
 
 <Step title="Create an agent">
 
 ```bash
-rayai create-agent my_agent --framework langchain
+rayai create-agent my_agent
 ```
 
-Available frameworks: `langchain`, `pydantic` (more coming soon)
+Available frameworks: `python` (default), `langchain`, `pydantic` (more coming soon)
 
-See the [framework guides](/frameworks/langchain) for framework-specific implementations.
+See the [framework guides](/frameworks/pydantic) for framework-specific implementations.
 
 This creates `agents/my_agent/agent.py` with a template you can customize.
 
 </Step>
 
-<Step title="Serve and test">
+<Step title="Run and test">
 
 Start the server:
 ```bash
-rayai serve
+rayai up
 ```
 
 Test your agent:
 ```bash
-curl -X POST http://localhost:8000/agents/my_agent/chat \
+curl -X POST http://localhost:8000/my_agent/ \
   -H "Content-Type: application/json" \
-  -d '{
-    "data": {
-      "messages": [{"role": "user", "content": "Hello!"}]
-    }
-  }'
+  -d '{"query": "Hello!"}'
 ```
 
 </Step>

@@ -16,46 +16,60 @@ description: "Build distributed agents from scratch with full control over execu
 rayai create-agent my_agent
 ```
 
-## The `@tool` decorator
+## The `@rayai.tool` decorator
 
-Define tools that automatically execute on Ray workers:
+Define tools that execute on Ray workers:
 
 ```python
-from rayai import tool
+import rayai
 
-@tool(desc="Search the web", num_cpus=1, memory="512MB")
+@rayai.tool(num_cpus=1, memory="512MB")
 def search_web(query: str) -> str:
+    """Search the web for information."""
     return f"Results for: {query}"
 
-# Call directly - Ray execution is automatic
-result = search_web(query="Python tutorials")
+# Tools are async - use await
+result = await search_web(query="Python tutorials")
 ```
 
-## The `@agent` decorator
+## The `Agent` base class
 
-Mark a class as a deployable agent:
+Subclass `Agent` to create a custom agent:
 
 ```python
-from rayai import agent
+import rayai
+from rayai import Agent
 
-@agent(num_cpus=2, memory="4GB", num_replicas=2)
-class MyAgent:
-    def run(self, data: dict) -> dict:
-        return {"response": "Hello!"}
+@rayai.tool
+def search(query: str) -> str:
+    """Search for information."""
+    return f"Results for: {query}"
+
+class MyAgent(Agent):
+    tools = [search]
+
+    async def run(self, query: str) -> str:
+        result = await self.call_tool("search", query=query)
+        return f"Found: {result}"
+
+# Serve with resources
+rayai.serve(MyAgent, name="my-agent", num_cpus=2, memory="4GB", replicas=2)
 ```
 
 ## Parallel tool execution
 
-Run multiple tools simultaneously:
+Use `call_tools_parallel()` to run multiple tools simultaneously:
 
 ```python
-from rayai import execute_tools
+class MyAgent(Agent):
+    tools = [search_web, fetch_data, analyze_text]
 
-results = execute_tools([
-    (search_web, {"query": "Python tutorials"}),
-    (fetch_data, {"url": "https://api.example.com"}),
-    (analyze_text, {"text": "Some content"}),
-], parallel=True)
+    async def run(self, query: str) -> str:
+        results = await self.call_tools_parallel([
+            ("search_web", {"query": query}),
+            ("fetch_data", {"url": "https://api.example.com"}),
+        ])
+        return str(results)
 ```
 
 ## Next steps

@@ -1,10 +1,30 @@
-"""Agentic-Ray"""
+"""Agentic-Ray - Distributed runtime for AI agents.
+
+Core API:
+    - tool: Decorator/wrapper to execute functions on Ray workers
+    - serve: Serve agents via HTTP with Ray Serve
+    - Agent: Base class for custom agents
+
+Example:
+    import rayai
+    from pydantic_ai import Agent
+
+    @rayai.tool(num_cpus=1)
+    def search(query: str) -> str:
+        '''Search the web.'''
+        return f"Results for {query}"
+
+    agent = Agent("gpt-4", tools=[search])
+    rayai.serve(agent, name="myagent")
+"""
 
 import importlib.metadata
 
+from rayai.agent_base import Agent
 from rayai.base import AgentProtocol
-from rayai.batch import BatchTool, BatchToolInput, BatchToolOutput
-from rayai.decorators import agent, tool
+from rayai.batch import BatchTool, BatchToolInput, BatchToolOutput, batch_tool
+from rayai.decorators import tool
+from rayai.serve import serve
 from rayai.utils import execute_tools
 
 try:
@@ -13,12 +33,18 @@ except importlib.metadata.PackageNotFoundError:
     __version__ = "unknown"
 
 __all__ = [
+    # Core API
+    "tool",  # Unified decorator/wrapper for Ray tools
+    "serve",  # Serve agents via HTTP
+    "Agent",  # Base class for custom agents
+    "batch_tool",
+    # Supporting types
     "AgentProtocol",
     "BatchTool",
     "BatchToolInput",
     "BatchToolOutput",
-    "agent",
+    # Utilities
     "execute_tools",
-    "tool",
+    # Version
     "__version__",
 ]

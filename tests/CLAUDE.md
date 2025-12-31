@@ -5,19 +5,22 @@
 Contains tests ensuring correctness of:
 
 - Tool execution and Ray task distribution
-- Agent adapters (LangChain, Pydantic AI)
+- BatchTool parallel execution
 - Sandbox behavior and security isolation
 - Distributed execution workflows
 - Code interpreter functionality
-- Integration between components
+- Resource parsing from docstrings
+- Agent serving functionality
 
 Tests protect against regressions when modifying the core runtime and validate that the system works correctly across different scenarios.
 
 ## Test Files
 
-- `test_code_interpreter.py` - Sandbox and code execution tests
-- `test_integration.py` - End-to-end integration tests
-- `test_tool_adapters.py` - Framework adapter tests
+- `test_batch_tool.py` - BatchTool parallel execution tests
+- `test_tool_decorator.py` - `@rayai.tool` decorator tests
+- `test_serve.py` - `rayai.serve()` registration tests
+- `test_sandbox.py` - Sandbox execution tests
+- `test_code_interpreter.py` - Code interpreter tests
 - `conftest.py` - Shared test fixtures and configuration
 
 ## Key Concepts an AI Should Know
@@ -31,16 +34,16 @@ Tests protect against regressions when modifying the core runtime and validate t
 
 ## Do / Don't
 
-### ✅ Do:
+### Do:
 
 - Add missing tests for new runtime features
-- Improve coverage for sandboxes and adapters
+- Improve coverage for sandbox functionality
 - Write tests that validate both success and error paths
 - Use fixtures for common test setup
 - Keep tests isolated and independent
 - Test edge cases and boundary conditions
 
-### ❌ Don't:
+### Don't:
 
 - Rewrite or delete tests unless the behavior intentionally changes
 - Add tests that require internet or external services

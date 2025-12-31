@@ -15,75 +15,66 @@ description: "Use LangChain and LangGraph with distributed Ray tools"
 rayai create-agent my_agent --framework langchain
 ```
 
-## Run LangChain tools on Ray
+## Define tools with `@rayai.tool`
 
-Wrap any LangChain tool to execute on Ray workers:
-
-```python
-from langchain.agents import create_agent
-from langchain_community.tools import DuckDuckGoSearchRun
-from rayai.adapters import from_langchain_tool
-
-# Wrap for Ray execution (returns a LangChain tool)
-search = from_langchain_tool(DuckDuckGoSearchRun(), num_cpus=1)
-
-# Use directly with LangChain agents (requires OPENAI_API_KEY env var)
-agent = create_agent(model="openai:gpt-4o-mini", tools=[search])
-```
-
-## Use Ray tools with LangChain
-
-Wrap Ray tools for use with LangChain agents:
+Use `@rayai.tool` to create Ray-distributed tools that work directly with LangChain:
 
 ```python
+import rayai
 from langchain.agents import create_agent
-from rayai import tool
-from rayai.adapters import RayToolWrapper, AgentFramework
+from langchain_openai import ChatOpenAI
 
-@tool(desc="Search the web", num_cpus=1)
+
+@rayai.tool(num_cpus=1)
 def search_web(query: str) -> str:
+    """Search the web for information."""
     return f"Results for: {query}"
 
-# Wrap for LangChain
-wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
-lc_tools = wrapper.wrap_tools([search_web])
 
-# Use with any LangChain agent (requires OPENAI_API_KEY env var)
-agent = create_agent(model="openai:gpt-4o-mini", tools=lc_tools)
+@rayai.tool(num_cpus=2, memory="4GB")
+def analyze_data(data: str) -> dict:
+    """Analyze data with heavy computation."""
+    return {"result": f"Analysis of {data}"}
+
+
+def make_agent():
+    llm = ChatOpenAI(model="gpt-4o-mini")
+    return create_agent(llm, tools=[search_web, analyze_data])
+
+
+rayai.serve(make_agent, name="my-agent", num_cpus=1, memory="2GB")
 ```
 
-## Cross-framework tools
+## Wrap existing tools
 
-Use tools from **any framework** with your LangChain agents. `RayToolWrapper` auto-detects the source framework and converts tools to LangChain-compatible `BaseTool` instances:
+Use `rayai.tool()` as a wrapper for existing LangChain tools or plain functions:
 
 ```python
+import rayai
 from langchain.agents import create_agent
-from pydantic_ai import Tool as PydanticTool
-from rayai.adapters import RayToolWrapper, AgentFramework
+from langchain_openai import ChatOpenAI
+from langchain_community.tools import DuckDuckGoSearchRun
 
-# Pydantic AI tool
-def multiply(x: int, y: int) -> int:
-    """Multiply two numbers."""
-    return x * y
 
-pydantic_tool = PydanticTool(multiply, name="multiply")
+# Wrap a LangChain tool for Ray execution
+search = rayai.tool(DuckDuckGoSearchRun(), num_cpus=1)
 
-# Plain Python function
-def greet(name: str) -> str:
-    """Greet someone by name."""
-    return f"Hello, {name}!"
 
-# Convert ANY tools to LangChain format
-wrapper = RayToolWrapper(framework=AgentFramework.LANGCHAIN)
-lc_tools = wrapper.wrap_tools([pydantic_tool, greet], num_cpus=1)
+# Wrap a plain function
+def calculate(a: int, b: int) -> int:
+    """Add two numbers together."""
+    return a + b
 
-# Use with LangChain agent - all tools execute on Ray (requires OPENAI_API_KEY env var)
-agent = create_agent(model="openai:gpt-4o-mini", tools=lc_tools)
+ray_calculate = rayai.tool(calculate)
+
+
+def make_agent():
+    llm = ChatOpenAI(model="gpt-4o-mini")
+    return create_agent(llm, tools=[search, ray_calculate])
+
+
+rayai.serve(make_agent, name="calc-agent")
 ```
-
-<Info>
-The wrapper auto-detects: Ray `@tool` functions, LangChain `BaseTool`, Pydantic AI `Tool`, and plain Python callables.
-</Info>
 
 ## Next steps
 

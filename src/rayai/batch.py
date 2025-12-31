@@ -1,8 +1,4 @@
-"""Generic batch tool for parallel execution of any registered tool.
-
-This module provides a flexible BatchTool that allows LLMs to call any
-registered tool by name with multiple inputs in parallel using Ray.
-"""
+"""Generic batch tool for parallel execution of any registered tool."""
 
 from collections.abc import Callable
 from typing import Any
@@ -10,11 +6,9 @@ from typing import Any
 import ray
 from pydantic import BaseModel, Field
 
-from rayai.adapters.core import RayTool, to_raytool
-
 
 class BatchToolInput(BaseModel):
-    """Input schema for BatchTool - exposed to LLMs."""
+    """Input schema for batch tool."""
 
     tool_name: str = Field(description="Name of the tool to execute")
     tool_inputs: list[dict[str, Any]] = Field(
@@ -23,7 +17,7 @@ class BatchToolInput(BaseModel):
 
 
 class BatchToolOutput(BaseModel):
-    """Output schema for BatchTool results."""
+    """Output schema for batch tool results."""
 
     results: list[Any] = Field(
         description="Results from each tool invocation (None if error occurred)"
@@ -35,118 +29,69 @@ class BatchToolOutput(BaseModel):
     count: int = Field(description="Number of inputs processed")
 
 
-class BatchTool:
-    """Generic batch tool for parallel execution of any registered tool.
+def batch_tool(
+    tools: list[Callable],
+    name: str = "batch",
+    description: str | None = None,
+) -> Callable[[str, list[dict[str, Any]]], dict[str, Any]]:
+    """Create a batch tool function for parallel execution of registered tools.
 
-    BatchTool is itself a tool that can be converted to LangChain/Pydantic AI
-    via RayToolWrapper. When called by an LLM, it:
+    Returns a plain function that works with any agent framework. When called by an LLM, it:
     1. Resolves the tool by name
-    2. Validates inputs against the tool's schema (optional)
-    3. Executes all inputs in parallel on Ray
-    4. Returns structured output with results and per-item errors
+    2. Executes all inputs in parallel on Ray
+    3. Returns structured output with results
+
+    Args:
+        tools: List of tools to register (names inferred from __name__)
+        name: Name for the batch tool (default: "batch")
+        description: Custom description for the batch tool
+
+    Returns:
+        A callable function that can be passed to any agent framework.
 
     Example:
-        >>> batch_tool = BatchTool(tools=[search_tool, fetch_tool])
-        >>> result = batch_tool(
-        ...     tool_name="search",
-        ...     tool_inputs=[{"query": "a"}, {"query": "b"}, {"query": "c"}]
+        >>> wiki_batch = batch_tool(tools=[wikipedia], name="wiki_batch")
+        >>> agent = Agent(..., tools=[wiki_batch])
+        >>>
+        >>> # The LLM can then call:
+        >>> result = wiki_batch(
+        ...     tool_name="wikipedia",
+        ...     tool_inputs=[{"query": "Python"}, {"query": "Rust"}]
         ... )
     """
+    tool_registry: dict[str, Callable] = {}
+    remote_funcs: dict[str, Any] = {}
 
-    def __init__(
-        self,
-        tools: list[Callable | RayTool] | None = None,
-        description: str | None = None,
-        name: str = "batch",
-        validate_inputs: bool = True,
-    ):
-        """Initialize BatchTool.
+    for tool in tools:
+        if hasattr(tool, "_original_func"):
+            tool_name = tool._original_func.__name__
+        elif hasattr(tool, "__name__"):
+            tool_name = tool.__name__
+        else:
+            raise ValueError(f"Cannot infer tool name for {tool}, provide explicitly")
 
-        Args:
-            tools: List of tools to register (names inferred from __name__)
-            description: Custom description for the batch tool
-            name: Name for the batch tool (default: "batch")
-            validate_inputs: Whether to validate inputs against tool schema
-        """
-        self._tools: dict[str, Callable | RayTool] = {}
-        self._name = name
-        self._validate_inputs = validate_inputs
-        self._description = description or self._default_description()
+        tool_registry[tool_name] = tool
 
-        if tools:
-            for tool in tools:
-                self._register(tool)
+        # Get or create the ray remote function
+        if hasattr(tool, "_remote_func"):
+            # Already a @rayai.tool decorated function
+            remote_funcs[tool_name] = tool._remote_func
+        else:
+            # Plain callable - wrap with ray.remote
+            remote_funcs[tool_name] = ray.remote(tool)
 
-        self._setup_tool_metadata()
+    available_tools = list(tool_registry.keys())
 
-    def _default_description(self) -> str:
-        return (
-            "Execute multiple calls to any registered tool in parallel. "
-            "Provide the tool name and a list of input dictionaries. "
-            "Returns results and any errors for each input."
-        )
+    default_description = (
+        f"Execute multiple calls to any registered tool in parallel. "
+        f"Available tools: {available_tools}. "
+        f"Provide the tool name and a list of input dictionaries. "
+        f"Returns results and any errors for each input."
+    )
+    tool_description = description or default_description
 
-    def _setup_tool_metadata(self) -> None:
-        """Set up metadata so BatchTool can be used as a tool itself."""
-        self.__name__ = self._name
-        self.__qualname__ = self._name
-        self.__doc__ = self._description
-
-        self.__annotations__ = {
-            "tool_name": str,
-            "tool_inputs": list[dict[str, Any]],
-            "return": dict[str, Any],
-        }
-
-        self.args_schema = BatchToolInput
-
-        self._tool_metadata = {
-            "desc": self._description,
-            "is_batch_tool": True,
-        }
-
-    def _register(self, tool: Callable | RayTool, name: str | None = None) -> None:
-        """Register a tool (internal)."""
-        if name is None:
-            if isinstance(tool, RayTool):
-                name = tool.name
-            elif hasattr(tool, "__name__"):
-                name = tool.__name__
-            else:
-                raise ValueError("Cannot infer tool name, provide explicitly")
-
-        self._tools[name] = tool
-
-    def _list_tools(self) -> list[str]:
-        """List all registered tool names."""
-        return list(self._tools.keys())
-
-    @property
-    def name(self) -> str:
-        """Tool name."""
-        return self._name
-
-    @property
-    def description(self) -> str:
-        """Tool description."""
-        return self._description
-
-    def _resolve(self, name: str) -> RayTool | None:
-        """Resolve a tool by name to RayTool."""
-        tool = self._tools.get(name)
-        if tool is None:
-            return None
-
-        if isinstance(tool, RayTool):
-            return tool
-        return to_raytool(tool)
-
-    def __call__(
-        self,
-        tool_name: str,
-        tool_inputs: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """Execute batch tool calls.
+    def batch(tool_name: str, tool_inputs: list[dict[str, Any]]) -> dict[str, Any]:
+        """Execute batch tool calls in parallel.
 
         Args:
             tool_name: Name of tool to execute
@@ -163,10 +108,8 @@ class BatchTool:
                 count=0,
             ).model_dump()
 
-        ray_tool = self._resolve(tool_name)
-        if ray_tool is None:
-            available = self._list_tools()
-            error_msg = f"Tool '{tool_name}' not found. Available: {available}"
+        if tool_name not in remote_funcs:
+            error_msg = f"Tool '{tool_name}' not found. Available: {available_tools}"
             return BatchToolOutput(
                 results=[None] * len(tool_inputs),
                 errors=[error_msg] * len(tool_inputs),
@@ -174,19 +117,20 @@ class BatchTool:
                 count=len(tool_inputs),
             ).model_dump()
 
-        if self._validate_inputs and ray_tool.args_schema:
-            validation_errors = self._validate_all_inputs(
-                ray_tool.args_schema, tool_inputs
-            )
-            if any(validation_errors):
-                return BatchToolOutput(
-                    results=[None] * len(tool_inputs),
-                    errors=validation_errors,
-                    tool_name=tool_name,
-                    count=len(tool_inputs),
-                ).model_dump()
+        remote_func = remote_funcs[tool_name]
+        refs = [remote_func.remote(**inp) for inp in tool_inputs]
 
-        results, errors = self._execute_parallel(ray_tool, tool_inputs)
+        results: list[Any] = []
+        errors: list[str | None] = []
+
+        for i, ref in enumerate(refs):
+            try:
+                result = ray.get(ref)
+                results.append(result)
+                errors.append(None)
+            except Exception as e:
+                results.append(None)
+                errors.append(f"Execution error for input {i}: {str(e)}")
 
         return BatchToolOutput(
             results=results,
@@ -195,62 +139,18 @@ class BatchTool:
             count=len(tool_inputs),
         ).model_dump()
 
-    def _validate_all_inputs(
-        self,
-        schema: type[BaseModel],
-        inputs: list[dict[str, Any]],
-    ) -> list[str | None]:
-        """Validate all inputs against schema."""
-        errors: list[str | None] = []
-        for i, inp in enumerate(inputs):
-            try:
-                schema.model_validate(inp)
-                errors.append(None)
-            except Exception as e:
-                errors.append(f"Input {i} validation error: {e}")
-        return errors
+    batch.__name__ = name
+    batch.__qualname__ = name
+    batch.__doc__ = tool_description
+    batch.__annotations__ = {
+        "tool_name": str,
+        "tool_inputs": list[dict[str, Any]],
+        "return": dict[str, Any],
+    }
 
-    def _execute_parallel(
-        self,
-        ray_tool: RayTool,
-        inputs: list[dict[str, Any]],
-    ) -> tuple[list[Any], list[str | None]]:
-        """Execute inputs in parallel on Ray."""
-        ray_remote = ray_tool.ray_remote
-        input_style = ray_tool.input_style
-
-        refs = []
-        for inp in inputs:
-            if input_style == "single_input":
-                if len(inp) == 1:
-                    refs.append(ray_remote.remote(next(iter(inp.values()))))
-                else:
-                    refs.append(ray_remote.remote(inp))
-            else:
-                refs.append(ray_remote.remote(**inp))
-
-        results: list[Any] = []
-        errors: list[str | None] = []
-
-        for i, ref in enumerate(refs):
-            try:
-                result = ray.get(ref)
-                results.append(self._handle_result(result))
-                errors.append(None)
-            except Exception as e:
-                results.append(None)
-                errors.append(f"Execution error for input {i}: {str(e)}")
-
-        return results, errors
-
-    def _handle_result(self, result: Any) -> Any:
-        """Handle result from Ray task."""
-        if isinstance(result, dict) and "status" in result:
-            if result["status"] == "error":
-                raise RuntimeError(result.get("error", "Unknown error"))
-            if "result" in result:
-                return result["result"]
-        return result
+    return batch
 
 
-__all__ = ["BatchTool", "BatchToolInput", "BatchToolOutput"]
+BatchTool = batch_tool
+
+__all__ = ["batch_tool", "BatchTool", "BatchToolInput", "BatchToolOutput"]

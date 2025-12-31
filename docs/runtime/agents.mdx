@@ -1,35 +1,90 @@
 ---
 title: "Agents"
-description: "Configure Agents as Ray Actors"
+description: "Build custom agents that run as Ray Actors"
 ---
 
-The `@agent` decorator marks a class as a deployable agent and configures its [Ray Actor](https://docs.ray.io/en/latest/ray-core/actors.html) resources.
+The `Agent` base class lets you build custom agents without relying on an external framework.
 
 ```python
-from rayai import agent
+import rayai
+from rayai import Agent
 
-@agent(num_cpus=2, memory="4GB", num_replicas=3)
-class MyAgent:
-    def run(self, data: dict) -> dict:
-        messages = data.get("messages", [])
-        # Process messages and return response
-        return {"response": "Hello!"}
+@rayai.tool
+def search(query: str) -> str:
+    """Search the web."""
+    return f"Results for {query}"
+
+class MyAgent(Agent):
+    tools = [search]
+
+    async def run(self, query: str) -> str:
+        result = await self.call_tool("search", query=query)
+        return f"Found: {result}"
+
+# Serve with resources
+rayai.serve(MyAgent, name="my-agent", num_cpus=2, memory="4GB", replicas=3)
 ```
 
-Each agent instance runs as a Ray Actor with dedicated resources, enabling:
+Each agent runs as a [Ray Actor](https://docs.ray.io/en/latest/ray-core/actors.html) with dedicated resources, enabling:
 - **Statefulness**: Maintain state across requests
 - **Resource isolation**: Guaranteed CPU, GPU, and memory allocation
 - **Horizontal scaling**: Multiple replicas for high availability
 
-## Resource Options
+## Calling Tools
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `num_cpus` | int | 1 | CPU cores per replica |
-| `num_gpus` | int | 0 | GPUs per replica |
-| `memory` | str | "2GB" | Memory per replica |
-| `num_replicas` | int | 1 | Number of replicas for scaling |
+Use `call_tool()` to execute a registered tool by name:
+
+```python
+class MyAgent(Agent):
+    tools = [search, analyze]
+
+    async def run(self, query: str) -> str:
+        result = await self.call_tool("search", query=query)
+        return result
+```
+
+## Parallel Tool Execution
+
+Use `call_tools_parallel()` to run multiple tools concurrently:
+
+```python
+class MyAgent(Agent):
+    tools = [search, analyze, summarize]
+
+    async def run(self, query: str) -> str:
+        results = await self.call_tools_parallel([
+            ("search", {"query": query}),
+            ("analyze", {"data": query}),
+        ])
+        search_result, analysis = results
+        return f"Search: {search_result}, Analysis: {analysis}"
+```
+
+## Helper Methods
+
+| Method | Description |
+|--------|-------------|
+| `call_tool(name, **kwargs)` | Call a tool by name and await the result |
+| `call_tools_parallel(calls)` | Call multiple tools in parallel |
+| `get_tool_names()` | Get list of registered tool names |
+| `get_tool_descriptions()` | Get dict of tool names to descriptions |
+
+## Serving Agents
+
+Configure resources when serving with `rayai.serve()`:
+
+```python
+rayai.serve(
+    MyAgent,
+    name="my-agent",
+    num_cpus=2,
+    memory="4GB",
+    replicas=3,
+)
+```
+
+See [Serving](/runtime/serving) for full options.
 
 <Info>
-If your agent uses async operations, define `async def run()` - RayAI automatically detects and awaits it.
+For framework-based agents, pass your agent directly to `rayai.serve()` - no base class needed.
 </Info>
