@@ -94,7 +94,7 @@ def init(project_name: str, project_type: str):
                 click.echo(
                     "  # Create your first agent: rayai create-agent <name> --framework <agent_framework>"
                 )
-                click.echo("  # Run agents: rayai serve")
+                click.echo("  # Run agents: rayai up")
 
             except Exception as e:
                 click.echo(f"Error: Failed to create project: {e}")

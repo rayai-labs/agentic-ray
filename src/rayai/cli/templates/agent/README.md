@@ -6,7 +6,7 @@ Built with [Agentic Ray](https://github.com/rayai-labs/agentic-ray).
 
 1. **Install:**
    ```bash
-   pip install agentic-ray
+   pip install rayai
    ```
 
 2. **Create a new project:**
@@ -22,19 +22,19 @@ Built with [Agentic Ray](https://github.com/rayai-labs/agentic-ray).
 
 4. **Run your agent:**
    ```bash
-   rayai serve
+   rayai up
    ```
 
 ## API Endpoints
 
-After running `rayai serve`, your agents are available at:
+After running `rayai up`, your agents are available at:
 
-- **POST** `/agents/{agent_name}/chat` - Call your agent
+- **POST** `/{agent_name}/` - Call your agent
 
 ### Example Request
 
 ```bash
-curl -X POST http://localhost:8000/agents/my_agent/chat \
+curl -X POST http://localhost:8000/my_agent/ \
   -H "Content-Type: application/json" \
-  -d '{"messages": [{"role": "user", "content": "Hello!"}]}'
+  -d '{"query": "Hello!"}'
 ```

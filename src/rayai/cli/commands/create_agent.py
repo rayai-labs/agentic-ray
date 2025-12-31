@@ -105,9 +105,8 @@ class {agent_name.title().replace("_", "")}(Agent):
         return f"Agent response: {{result}}"
 
 
-# Create agent instance and serve
-agent = {agent_name.title().replace("_", "")}()
-rayai.serve(agent, name="{agent_name}", num_cpus=1, memory="2GB")
+# Serve the agent
+rayai.serve({agent_name.title().replace("_", "")}, name="{agent_name}", num_cpus=1, memory="2GB")
 '''
 
 

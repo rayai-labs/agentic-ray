@@ -47,9 +47,9 @@ Run with `rayai up` or `python agents/myagent/agent.py`.
 
 ## Project Structure Overview
 
-- `src/rayai/` – core runtime, agents, tools, sandbox logic, adapters, CLI
+- `src/rayai/` – core runtime, agents, tools, sandbox logic, CLI
 - `examples/` – example uses of agents and tools on Ray (analyzer, finance_agent)
-- `tests/` – unit tests for runtime execution, tool adapters, sandbox behavior
+- `tests/` – unit tests for runtime execution, tools, sandbox behavior
 - `scripts/` – developer or cluster helper scripts (gVisor setup, Docker configuration)
 
 ## Technology Stack
@@ -68,7 +68,7 @@ Run with `rayai up` or `python agents/myagent/agent.py`.
 
 - Improve documentation comments and docstrings
 - Refactor for clarity without breaking public APIs
-- Add new adapters or sandbox capabilities behind clean interfaces
+- Add new sandbox capabilities behind clean interfaces
 - Follow existing patterns for tool decoration and Ray integration
 - Maintain security boundaries in sandbox execution
 - Update examples when adding new features

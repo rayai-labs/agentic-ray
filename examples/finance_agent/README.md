@@ -28,15 +28,15 @@ A stock market analysis agent using Pydantic AI with Ray-distributed tools.
 
 3. Start the agent:
    ```bash
-   rayai serve
+   rayai up
    ```
 
 ## Test
 
 ```bash
-curl -X POST http://localhost:8000/agents/finance/chat \
+curl -X POST http://localhost:8000/finance/ \
   -H 'Content-Type: application/json' \
-  -d '{"data": {"messages": [{"role": "user", "content": "Get the top 5 S&P 500 stocks"}]}, "session_id": "test"}'
+  -d '{"query": "Get the top 5 S&P 500 stocks"}'
 ```
 
 ## Tools

@@ -97,7 +97,7 @@ class MyAgent(Agent):
 
 - Add heavyweight dependencies to core runtime
 - Let untrusted code escape sandbox boundaries
-- Create framework-specific code outside adapters
+- Create framework-specific code in the core runtime
 - Modify security-critical sandbox code without review
 - Introduce non-serializable objects in tool signatures
 
@@ -105,4 +105,4 @@ class MyAgent(Agent):
 
 - `examples/` for usage patterns and demonstrations
 - `tests/` for validated expected behavior
-- See subdirectory `CLAUDE.md` files for adapter, CLI, and sandbox details
+- See subdirectory `CLAUDE.md` files for CLI and sandbox details

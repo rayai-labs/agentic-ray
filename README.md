@@ -37,7 +37,7 @@ rayai create-agent my_agent --framework pydantic
 rayai up
 ```
 
-Your agent is now available at `http://localhost:8000/my_agent`
+Your agent is now available at `http://localhost:8000/my_agent/`
 
 ## Installation
 
@@ -98,14 +98,15 @@ def search(query: str) -> str:
     return f"Results for: {query}"
 
 # Create Pydantic AI agent with Ray-distributed tools
-agent = Agent(
-    "openai:gpt-4o-mini",
-    system_prompt="You are a helpful assistant.",
-    tools=[search],
-)
+def make_agent():
+    return Agent(
+        "openai:gpt-4o-mini",
+        system_prompt="You are a helpful assistant.",
+        tools=[search],
+    )
 
 # Serve the agent
-rayai.serve(agent, name="my_agent", num_cpus=1, memory="2GB")
+rayai.serve(make_agent, name="my_agent", num_cpus=1, memory="2GB")
 ```
 
 Run with:
@@ -116,7 +117,7 @@ rayai up
 Test your agent:
 
 ```bash
-curl -X POST http://localhost:8000/my_agent \
+curl -X POST http://localhost:8000/my_agent/ \
   -H "Content-Type: application/json" \
   -d '{"query": "Hello!"}'
 ```
@@ -160,13 +161,15 @@ Serve an agent via HTTP with Ray Serve. Auto-detects framework (Pydantic AI, Lan
 import rayai
 from pydantic_ai import Agent
 
-agent = Agent("openai:gpt-4", tools=[search])
-rayai.serve(agent, name="myagent", num_cpus=1, memory="2GB")
+def make_agent():
+    return Agent("openai:gpt-4", tools=[search])
+
+rayai.serve(make_agent, name="myagent", num_cpus=1, memory="2GB")
 ```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `agent` | Any | required | Agent instance (Pydantic AI, LangChain, or custom) |
+| `agent` | Any | required | Agent class, function, or instance |
 | `name` | str | None | Agent name (inferred from directory if not set) |
 | `port` | int | 8000 | HTTP port |
 | `num_cpus` | int | 1 | CPU cores per replica |
@@ -188,8 +191,7 @@ class MyAgent(Agent):
         result = await self.call_tool("search", query=query)
         return f"Found: {result}"
 
-agent = MyAgent()
-rayai.serve(agent, name="myagent")
+rayai.serve(MyAgent, name="myagent")
 ```
 
 ### `execute_tools`
@@ -197,16 +199,17 @@ rayai.serve(agent, name="myagent")
 Execute multiple tools in parallel on Ray:
 
 ```python
-from rayai import tool, execute_tools
+import rayai
+from rayai import execute_tools
 
-@rayai.tool
+@rayai.tool(num_cpus=1)
 def tool_1(x: str) -> str:
-    """Tool 1. ray: num_cpus=1"""
+    """Process input with tool 1."""
     return process_1(x)
 
-@rayai.tool
+@rayai.tool(num_cpus=1)
 def tool_2(x: str) -> dict:
-    """Tool 2. ray: num_cpus=1"""
+    """Process input with tool 2."""
     return process_2(x)
 
 # Execute both tools in parallel on Ray
