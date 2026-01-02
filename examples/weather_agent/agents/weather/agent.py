@@ -1,7 +1,6 @@
 """Weather agent using Pydantic AI with batch_tool for parallel execution."""
 
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,7 +13,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 REQUIRED_KEYS = ["OPENAI_API_KEY", "WEATHER_API_KEY"]
 missing = [k for k in REQUIRED_KEYS if not os.environ.get(k)]
 if missing:
-    sys.exit(f"Missing required environment variables: {', '.join(missing)}")
+    raise OSError(f"Missing required environment variables: {', '.join(missing)}")
 
 from .tools import batch_weather  # noqa: E402
 

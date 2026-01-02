@@ -70,7 +70,7 @@ User Query
 ## Required Environment Variables
 
 - `OPENAI_API_KEY`: For LLM calls (city extraction, summarization)
-- `WEATHER_API_KEY`: OpenWeatherMap API key
+- `WEATHER_API_KEY`: WeatherAPI.com API key
 
 ## Do / Don't
 

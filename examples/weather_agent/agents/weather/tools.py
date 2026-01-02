@@ -28,9 +28,7 @@ def get_weather(city: str) -> dict:
             params={"key": api_key, "q": city},
             timeout=10,
         )
-
-        if response.status_code != 200:
-            return {"city": city, "error": f"API error: {response.status_code}"}
+        response.raise_for_status()
 
         data = response.json()
         return {
@@ -41,7 +39,7 @@ def get_weather(city: str) -> dict:
             "condition": data["current"]["condition"]["text"],
         }
 
-    except requests.RequestException as e:
+    except (requests.RequestException, ValueError) as e:
         return {"city": city, "error": str(e)}
 
 
