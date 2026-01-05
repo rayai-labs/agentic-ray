@@ -203,7 +203,7 @@ def _wait_for_deployment(client: PlatformClient, name: str):
             deployment = client.get_deployment(name)
         except PlatformAPIError as e:
             click.echo(f"Error checking status: {e.message}", err=True)
-            break
+            sys.exit(1)
 
         status_color = {
             "running": "green",
@@ -217,6 +217,3 @@ def _wait_for_deployment(client: PlatformClient, name: str):
 
         if deployment.status in terminal_states:
             return deployment
-
-    # Return last known state
-    return deployment

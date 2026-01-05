@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import sys
 import tarfile
 import tempfile
@@ -55,7 +56,9 @@ def package_deployment(
         ],
     )
 
-    package_path = Path(tempfile.mktemp(suffix=".tar.gz"))
+    fd, package_path_str = tempfile.mkstemp(suffix=".tar.gz")
+    os.close(fd)
+    package_path = Path(package_path_str)
 
     with tarfile.open(package_path, "w:gz") as tar:
         agents_dir = project_path / "agents"
