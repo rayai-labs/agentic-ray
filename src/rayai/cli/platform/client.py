@@ -72,6 +72,7 @@ class PlatformClient:
         json_data: dict | None = None,
         files: dict | None = None,
         data: dict | None = None,
+        params: dict | None = None,
         stream: bool = False,
         authenticated: bool = True,
     ) -> requests.Response:
@@ -83,6 +84,7 @@ class PlatformClient:
             json_data: JSON body data.
             files: Files for multipart upload.
             data: Form data for multipart upload.
+            params: URL query parameters.
             stream: Whether to stream response.
             authenticated: Whether to include auth header.
 
@@ -107,6 +109,7 @@ class PlatformClient:
                 json=json_data,
                 files=files,
                 data=data,
+                params=params,
                 stream=stream,
                 timeout=None if stream else self.timeout,
             )
@@ -254,11 +257,11 @@ class PlatformClient:
         Returns:
             List of log entries.
         """
-        params = f"?tail={tail}"
+        query_params: dict[str, int | str] = {"tail": tail}
         if agent:
-            params += f"&agent={agent}"
+            query_params["agent"] = agent
 
-        resp = self._request("GET", f"/deployments/{name}/logs{params}")
+        resp = self._request("GET", f"/deployments/{name}/logs", params=query_params)
         logs = resp.json().get("logs", [])
         return [LogEntry.model_validate(log) for log in logs]
 
@@ -272,9 +275,9 @@ class PlatformClient:
         Yields:
             Log entries as they arrive.
         """
-        params = f"?agent={agent}" if agent else ""
+        query_params: dict[str, str] | None = {"agent": agent} if agent else None
         resp = self._request(
-            "GET", f"/deployments/{name}/logs/stream{params}", stream=True
+            "GET", f"/deployments/{name}/logs/stream", params=query_params, stream=True
         )
 
         for line in resp.iter_lines():
