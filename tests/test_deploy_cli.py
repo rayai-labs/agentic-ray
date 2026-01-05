@@ -158,6 +158,7 @@ class TestStatusCommand:
                 # Output is a JSON list of deployments
                 data = json.loads(result.output)
                 assert isinstance(data, list)
+                assert data[0]["id"] == "deploy-1"
                 assert data[0]["name"] == "myapp"
                 assert data[0]["status"] == "running"
 
@@ -312,6 +313,75 @@ class TestDeployCommand:
 
                 assert result.exit_code == 1
                 assert "No agents found" in result.output
+
+
+class TestWaitForDeployment:
+    """Tests for _wait_for_deployment helper."""
+
+    def test_wait_for_deployment_success(self):
+        """Wait returns when deployment reaches running state."""
+        from rayai.cli.commands.deploy import _wait_for_deployment
+        from rayai.cli.platform.client import PlatformClient
+
+        mock_client = MagicMock(spec=PlatformClient)
+        mock_client.get_deployment.return_value = DeploymentResponse(
+            id="deploy-1",
+            name="myapp",
+            status="running",
+            url="https://myapp.rayai.com",
+        )
+
+        with patch("rayai.cli.commands.deploy.time.sleep"):
+            result = _wait_for_deployment(mock_client, "myapp", timeout=60)
+
+        assert result.status == "running"
+        mock_client.get_deployment.assert_called_with("myapp")
+
+    def test_wait_for_deployment_timeout(self):
+        """Wait exits with error when timeout is exceeded."""
+        from rayai.cli.commands.deploy import _wait_for_deployment
+        from rayai.cli.platform.client import PlatformClient
+
+        mock_client = MagicMock(spec=PlatformClient)
+        # Always return pending status
+        mock_client.get_deployment.return_value = DeploymentResponse(
+            id="deploy-1",
+            name="myapp",
+            status="pending",
+        )
+
+        # Mock time to simulate timeout
+        with patch("rayai.cli.commands.deploy.time.sleep"):
+            with patch("rayai.cli.commands.deploy.time.time") as mock_time:
+                # First call returns 0, subsequent calls return values > timeout
+                mock_time.side_effect = [
+                    0,
+                    0,
+                    100,
+                ]  # start, first check (exceeds timeout=10)
+                with pytest.raises(SystemExit) as exc:
+                    _wait_for_deployment(mock_client, "myapp", timeout=10)
+
+                assert exc.value.code == 1
+
+    def test_wait_for_deployment_failed_state(self):
+        """Wait returns when deployment reaches failed state."""
+        from rayai.cli.commands.deploy import _wait_for_deployment
+        from rayai.cli.platform.client import PlatformClient
+
+        mock_client = MagicMock(spec=PlatformClient)
+        mock_client.get_deployment.return_value = DeploymentResponse(
+            id="deploy-1",
+            name="myapp",
+            status="failed",
+            error="Build failed",
+        )
+
+        with patch("rayai.cli.commands.deploy.time.sleep"):
+            result = _wait_for_deployment(mock_client, "myapp", timeout=60)
+
+        assert result.status == "failed"
+        assert result.error == "Build failed"
 
 
 class TestPlatformClient:

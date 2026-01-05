@@ -14,6 +14,7 @@ Usage:
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from dotenv import dotenv_values
@@ -23,6 +24,10 @@ from rayai.cli.platform.auth import is_authenticated
 from rayai.cli.platform.client import PlatformAPIError, PlatformClient
 from rayai.cli.platform.packaging import package_deployment
 
+if TYPE_CHECKING:
+    from rayai.cli.platform.types import DeploymentResponse
+    from rayai.serve import AgentConfig
+
 
 @click.command()
 @click.argument("project_path", default=".")
@@ -31,6 +36,9 @@ from rayai.cli.platform.packaging import package_deployment
 @click.option("--env", multiple=True, help="Environment variable (KEY=VALUE)")
 @click.option("--env-file", type=click.Path(exists=True), help="Path to .env file")
 @click.option("--wait/--no-wait", default=True, help="Wait for deployment to complete")
+@click.option(
+    "--timeout", default=600, help="Timeout in seconds when waiting (default: 600)"
+)
 def deploy(
     project_path: str,
     agents: str | None,
@@ -38,6 +46,7 @@ def deploy(
     env: tuple[str, ...],
     env_file: str | None,
     wait: bool,
+    timeout: int,
 ) -> None:
     """Deploy agents to RayAI Cloud.
 
@@ -51,6 +60,7 @@ def deploy(
         rayai deploy --env API_KEY=xxx      # With environment variable
         rayai deploy --env-file .env.prod   # With env file
         rayai deploy --no-wait              # Don't wait for completion
+        rayai deploy --timeout 300          # Wait up to 5 minutes
     """
     if not is_authenticated():
         click.echo("Error: Not logged in. Run 'rayai login' first.", err=True)
@@ -126,7 +136,7 @@ def deploy(
     # Wait for deployment to complete
     if wait and deployment.status not in ("running", "failed", "stopped"):
         click.echo("\nWaiting for deployment to complete...")
-        deployment = _wait_for_deployment(client, deployment_name)
+        deployment = _wait_for_deployment(client, deployment_name, timeout)
 
     # Print result
     if deployment.status == "running":
@@ -144,7 +154,7 @@ def deploy(
 
 def _discover_agents(
     project_dir: Path, agents_dir: Path, agent_filter: str | None
-) -> list:
+) -> list["AgentConfig"]:
     """Discover agents in the project.
 
     Args:
@@ -184,20 +194,32 @@ def _discover_agents(
     return get_registered_agents()
 
 
-def _wait_for_deployment(client: PlatformClient, name: str):
+def _wait_for_deployment(
+    client: PlatformClient, name: str, timeout: int
+) -> "DeploymentResponse":
     """Wait for deployment to reach terminal state.
 
     Args:
         client: Platform API client.
         name: Deployment name.
+        timeout: Maximum time to wait in seconds.
 
     Returns:
         Final DeploymentResponse state.
     """
     terminal_states = {"running", "failed", "stopped"}
     poll_interval = 5
+    start_time = time.time()
 
     while True:
+        elapsed = time.time() - start_time
+        if elapsed >= timeout:
+            click.echo(
+                f"\nError: Deployment timed out after {timeout} seconds.", err=True
+            )
+            click.echo("Check status with 'rayai status'.", err=True)
+            sys.exit(1)
+
         time.sleep(poll_interval)
         try:
             deployment = client.get_deployment(name)
