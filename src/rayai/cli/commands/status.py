@@ -62,6 +62,7 @@ def _output_json(deployments: list[DeploymentResponse]) -> None:
     """Output deployments as JSON."""
     output = [
         {
+            "id": d.id,
             "name": d.name,
             "status": d.status,
             "url": d.url,
