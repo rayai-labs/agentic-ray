@@ -9,6 +9,7 @@ import sys
 import tarfile
 import tempfile
 from datetime import UTC, datetime
+from importlib.metadata import version
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,7 +41,7 @@ def package_deployment(
     """
     manifest = DeploymentManifest(
         name=deployment_name,
-        rayai_version="0.1.0",
+        rayai_version=version("rayai"),
         python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         created_at=datetime.now(UTC).isoformat(),
         agents=[

@@ -13,6 +13,7 @@ import sys
 
 import click
 
+from rayai.cli.analytics import track
 from rayai.cli.platform.auth import is_authenticated
 from rayai.cli.platform.client import PlatformAPIError, PlatformClient
 from rayai.cli.platform.types import LogEntry
@@ -46,6 +47,7 @@ def logs(deployment_name: str, follow: bool, tail: int, agent: str | None) -> No
             _stream_logs(client, deployment_name, agent)
         else:
             _get_logs(client, deployment_name, tail, agent)
+        track("cli_logs", {"follow": follow})
     except PlatformAPIError as e:
         click.echo(f"Error: {e.message}", err=True)
         sys.exit(1)
