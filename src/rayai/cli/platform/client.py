@@ -171,6 +171,21 @@ class PlatformClient:
             authenticated=False,
         )
         data = resp.json()
+
+        # Handle OAuth error responses per RFC 8628
+        if "error" in data:
+            error = data["error"]
+            if error == "authorization_pending":
+                raise PlatformAPIError(428, "Authorization pending")
+            elif error == "slow_down":
+                raise PlatformAPIError(400, "Slow down")
+            elif error == "expired_token":
+                raise PlatformAPIError(410, "Device code expired")
+            elif error == "access_denied":
+                raise PlatformAPIError(403, "Access denied by user")
+            else:
+                raise PlatformAPIError(400, data.get("error_description", error))
+
         return Credentials(
             token=data["access_token"],
             expires_at=data.get("expires_at"),
