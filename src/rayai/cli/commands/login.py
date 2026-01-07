@@ -6,7 +6,6 @@ either using an API key or OAuth device flow.
 Usage:
     rayai login                 # Interactive OAuth flow
     rayai login --api-key KEY   # API key authentication
-    rayai login --logout        # Clear stored credentials
 """
 
 import sys
@@ -24,8 +23,7 @@ from rayai.cli.platform.types import Credentials
 
 @click.command()
 @click.option("--api-key", help="API key for authentication")
-@click.option("--logout", is_flag=True, help="Log out and clear credentials")
-def login(api_key: str | None, logout: bool) -> None:
+def login(api_key: str | None) -> None:
     """Authenticate with RayAI Cloud.
 
     Authenticates using either an API key or interactive OAuth device flow.
@@ -34,18 +32,12 @@ def login(api_key: str | None, logout: bool) -> None:
     Examples:
         rayai login                 # Interactive OAuth flow
         rayai login --api-key KEY   # Use API key
-        rayai login --logout        # Clear credentials
     """
-    if logout:
-        clear_credentials()
-        click.echo("Logged out successfully.")
-        return
-
     existing_creds = get_credentials()
     if existing_creds and not api_key:
         client = PlatformClient()
         if client.validate_token():
-            click.echo("Already logged in. Use --logout to sign out.")
+            click.echo("Already logged in. Use 'rayai logout' to sign out.")
             return
 
     client = PlatformClient()

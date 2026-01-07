@@ -7,6 +7,7 @@ Usage:
     rayai create-agent <name> [--framework=pydantic|langchain|python]
     rayai create-mcp <name>
     rayai login [--api-key=KEY]
+    rayai logout
     rayai deploy [--name=NAME] [--agents=<names>]
     rayai status [deployment_name]
     rayai logs <deployment_name> [-f]
@@ -25,6 +26,7 @@ from .commands import (
     deploy,
     init,
     login,
+    logout,
     logs,
     status,
     up,
@@ -53,6 +55,7 @@ cli.add_command(analytics.analytics)
 
 # Cloud deployment commands
 cli.add_command(login.login)
+cli.add_command(logout.logout)
 cli.add_command(deploy.deploy)
 cli.add_command(status.status)
 cli.add_command(logs.logs)
