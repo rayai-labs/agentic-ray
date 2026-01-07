@@ -178,13 +178,19 @@ class PlatformClient:
         )
         data = resp.json()
 
-        # Handle OAuth 2.0 device flow error responses (RFC 8628)
+        # Handle OAuth error responses per RFC 8628
         if "error" in data:
-            raise PlatformAPIError(
-                400,
-                data.get("error_description", data["error"]),
-                {"oauth_error": data["error"]},
-            )
+            error = data["error"]
+            if error == "authorization_pending":
+                raise PlatformAPIError(428, "Authorization pending")
+            elif error == "slow_down":
+                raise PlatformAPIError(400, "Slow down")
+            elif error == "expired_token":
+                raise PlatformAPIError(410, "Device code expired")
+            elif error == "access_denied":
+                raise PlatformAPIError(403, "Access denied by user")
+            else:
+                raise PlatformAPIError(400, data.get("error_description", error))
 
         # Handle different token key names from various OAuth implementations
         token = data.get("access_token") or data.get("token")
