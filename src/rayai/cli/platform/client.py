@@ -182,13 +182,21 @@ class PlatformClient:
         if "error" in data:
             error = data["error"]
             if error == "authorization_pending":
-                raise PlatformAPIError(428, "Authorization pending")
+                raise PlatformAPIError(
+                    428,
+                    "Authorization pending",
+                    {"oauth_error": "authorization_pending"},
+                )
             elif error == "slow_down":
-                raise PlatformAPIError(400, "Slow down")
+                raise PlatformAPIError(400, "Slow down", {"oauth_error": "slow_down"})
             elif error == "expired_token":
-                raise PlatformAPIError(410, "Device code expired")
+                raise PlatformAPIError(
+                    410, "Device code expired", {"oauth_error": "expired_token"}
+                )
             elif error == "access_denied":
-                raise PlatformAPIError(403, "Access denied by user")
+                raise PlatformAPIError(
+                    403, "Access denied by user", {"oauth_error": "access_denied"}
+                )
             else:
                 raise PlatformAPIError(400, data.get("error_description", error))
 

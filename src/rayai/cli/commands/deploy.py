@@ -166,8 +166,7 @@ def deploy(
     # Print result
     if deployment.status == "running":
         click.echo(click.style("\nDeployment successful!", fg="green"))
-        if deployment.url:
-            click.echo(f"URL: {deployment.url}")
+        _print_deployment_info(deployment, registered)
     elif deployment.status == "failed":
         click.echo(click.style("\nDeployment failed!", fg="red"), err=True)
         if deployment.error:
@@ -175,6 +174,42 @@ def deploy(
         sys.exit(1)
 
     track("cli_deploy", {"agent_count": len(registered)})
+
+
+def _print_deployment_info(
+    deployment: "DeploymentResponse", agents: list["AgentConfig"]
+) -> None:
+    """Print deployment info with endpoints and example curl command.
+
+    Args:
+        deployment: Deployment response from API.
+        agents: List of deployed agents.
+    """
+    base_url = deployment.url
+    if not base_url:
+        return
+
+    # Remove trailing slash from base URL for consistent formatting
+    base_url = base_url.rstrip("/")
+
+    # Print endpoints for each agent
+    click.echo(f"\n{click.style('Endpoints:', bold=True)}")
+    for agent in agents:
+        route = agent.route_prefix.rstrip("/") + "/"
+        full_url = f"{base_url}{route}"
+        click.echo(f"  • {agent.name}: {click.style(full_url, fg='cyan')}")
+
+    # Print example curl command using the first agent
+    if agents:
+        first_agent = agents[0]
+        route = first_agent.route_prefix.rstrip("/") + "/"
+        full_url = f"{base_url}{route}"
+
+        click.echo(f"\n{click.style('Test your agent:', bold=True)}")
+        click.echo(f'  curl -X POST "{full_url}" \\')
+        click.echo('    -H "Authorization: Bearer <your-token>" \\')
+        click.echo('    -H "Content-Type: application/json" \\')
+        click.echo('    -d \'{"query": "Hello"}\'')
 
 
 def _discover_agents(
@@ -327,9 +362,14 @@ def _wait_for_deployment(
         status_color = {
             "running": "green",
             "failed": "red",
+            "stopped": "red",
             "pending": "yellow",
             "building": "yellow",
             "deploying": "cyan",
+            "starting": "cyan",
+            "updating": "cyan",
+            "rolling_back": "yellow",
+            "unhealthy": "red",
         }.get(deployment.status, "white")
 
         # Single-line spinner with status update
