@@ -43,7 +43,18 @@ class DeploymentResponse(BaseModel):
 
     id: str
     name: str
-    status: Literal["pending", "building", "deploying", "running", "failed", "stopped"]
+    status: Literal[
+        "pending",
+        "building",
+        "deploying",
+        "running",
+        "failed",
+        "stopped",
+        "starting",
+        "unhealthy",
+        "updating",
+        "rolling_back",
+    ]
     url: str | None = Field(None, alias="endpoint_url")
     agents: list[AgentManifest] = Field(default_factory=list)
     created_at: str = ""
