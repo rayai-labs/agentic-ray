@@ -5,13 +5,30 @@ Usage:
     rayai init <project_name> [--type=agent]
     rayai up [--port=8000] [--agents=<names>]
     rayai create-agent <name> [--framework=pydantic|langchain|python]
+    rayai login [--api-key=KEY]
+    rayai logout
+    rayai deploy [--name=NAME] [--agents=<names>]
+    rayai status [deployment_name]
+    rayai logs <deployment_name> [-f]
+    rayai delete <deployment_name>
 """
 
 from importlib.metadata import version
 
 import click
 
-from .commands import analytics, create_agent, init, up
+from .commands import (
+    analytics,
+    create_agent,
+    delete,
+    deploy,
+    init,
+    login,
+    logout,
+    logs,
+    status,
+    up,
+)
 
 
 @click.group()
@@ -21,10 +38,19 @@ def cli():
     pass
 
 
+# Local development commands
 cli.add_command(init.init)
 cli.add_command(up.up)
 cli.add_command(create_agent.create_agent)
 cli.add_command(analytics.analytics)
+
+# Cloud deployment commands
+cli.add_command(login.login)
+cli.add_command(logout.logout)
+cli.add_command(deploy.deploy)
+cli.add_command(status.status)
+cli.add_command(logs.logs)
+cli.add_command(delete.delete)
 
 
 def main():
