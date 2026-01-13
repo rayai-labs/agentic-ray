@@ -142,12 +142,11 @@ def deploy(
         # Clean up temporary package file
         package_path.unlink(missing_ok=True)
 
+    from rayai.cli.platform.config import DASHBOARD_URL
+
     click.echo(f"Deployment '{deployment.name}' submitted.")
     click.echo()
-    click.echo(
-        "View status on the dashboard: "
-        + click.style("http://localhost:3001", fg="cyan")
-    )
+    click.echo("View status on the dashboard: " + click.style(DASHBOARD_URL, fg="cyan"))
 
     track("cli_deploy", {"agent_count": len(registered)})
 
