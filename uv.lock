@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1786,6 +1786,7 @@ name = "rayai"
 version = "0.1.2"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "click" },
     { name = "fastapi" },
     { name = "langchain" },
@@ -1816,6 +1817,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4.0" },
     { name = "click", specifier = ">=8.0.0" },
     { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0.0" },
     { name = "fastapi", specifier = ">=0.100.0" },
