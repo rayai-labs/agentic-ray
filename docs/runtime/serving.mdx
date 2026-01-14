@@ -99,16 +99,27 @@ Streaming support depends on the agent framework. Most frameworks support both t
 
 ## CLI: rayai up
 
-The `rayai up` command discovers and runs all agents in your project:
+The `rayai up` command discovers and runs all agents and MCP servers in your project:
 
 ```bash
 rayai up
 ```
 
+```
+Serving at http://localhost:8000
+
+  Agents:
+    POST http://localhost:8000/myagent/
+
+  MCP Servers:
+    http://localhost:8000/weather/mcp
+```
+
 It automatically:
 1. Imports all `agents/*/agent.py` files
-2. Collects `rayai.serve()` registrations
-3. Starts Ray Serve with all agents
+2. Imports all `mcp_servers/*/server.py` files
+3. Collects `rayai.serve()` and `rayai.serve_mcp()` registrations
+4. Starts Ray Serve with everything on one port
 
 ### CLI Options
 
@@ -119,7 +130,9 @@ rayai up [OPTIONS]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--port` | 8000 | HTTP server port |
+| `--host` | 0.0.0.0 | Host to bind to |
 | `--agents` | All | Comma-separated list of agents to run |
+| `--servers` | All | Comma-separated list of MCP servers to run |
 
 ## Scaling with Replicas
 
