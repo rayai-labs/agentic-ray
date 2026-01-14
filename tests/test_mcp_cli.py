@@ -49,7 +49,7 @@ class TestMCPServerConfig:
         config = MCPServerConfig(
             mcp_server=MockMCP(),
             name="test",
-            num_cpus=0.5,
+            num_cpus=1,
             num_gpus=0,
             memory="512MB",
             replicas=1,
