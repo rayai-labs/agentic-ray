@@ -26,6 +26,36 @@ class AgentManifest(BaseModel):
     pip: list[str] = Field(default_factory=list)
 
 
+class MCPToolInfo(BaseModel):
+    """Metadata for an MCP tool."""
+
+    name: str
+    description: str = ""
+
+
+class MCPResourceInfo(BaseModel):
+    """Metadata for an MCP resource."""
+
+    name: str
+    uri: str
+    description: str = ""
+
+
+class MCPServerManifest(BaseModel):
+    """Metadata for a single MCP server in a deployment."""
+
+    name: str
+    route_prefix: str
+    import_path: str = ""
+    num_cpus: int | float
+    num_gpus: int | float
+    memory: str
+    replicas: int
+    pip: list[str] = Field(default_factory=list)
+    tools: list[MCPToolInfo] = Field(default_factory=list)
+    resources: list[MCPResourceInfo] = Field(default_factory=list)
+
+
 class DeploymentManifest(BaseModel):
     """Deployment package manifest."""
 
@@ -33,6 +63,7 @@ class DeploymentManifest(BaseModel):
     rayai_version: str = "0.1.0"
     name: str = ""
     agents: list[AgentManifest] = Field(default_factory=list)
+    mcp_servers: list[MCPServerManifest] = Field(default_factory=list)
     python_version: str = ""
     created_at: str = ""
     checksum: str = ""
@@ -57,6 +88,7 @@ class DeploymentResponse(BaseModel):
     ]
     url: str | None = Field(None, alias="endpoint_url")
     agents: list[AgentManifest] = Field(default_factory=list)
+    mcp_servers: list[MCPServerManifest] = Field(default_factory=list)
     created_at: str = ""
     updated_at: str = ""
     error: str | None = Field(None, alias="error_message")
