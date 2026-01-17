@@ -128,11 +128,13 @@ def _generate_serve_entry_point(agent_name: str) -> str:
     """Generate a Ray Serve entry point script for an agent.
 
     Creates a self-contained module for cloud deployment.
+    Supports all 3 agent patterns: pydantic, langchain, and pure python.
     """
     return f'''"""Ray Serve entry point for {agent_name}."""
 import sys
 import os
 import inspect
+import importlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -148,7 +150,27 @@ class ChatResponse(BaseModel):
     response: str
     session_id: str
 
-from agents.{agent_name}.agent import make_agent
+# Dynamically detect agent pattern (make_agent function or Agent class)
+agent_module = importlib.import_module("agents.{agent_name}.agent")
+
+def _get_agent_factory():
+    """Get the agent factory function or class."""
+    # Try make_agent function first (pydantic/langchain pattern)
+    if hasattr(agent_module, "make_agent"):
+        return agent_module.make_agent
+
+    # Look for rayai.Agent subclass (python pattern)
+    try:
+        from rayai import Agent as RayAgent
+        for name, obj in vars(agent_module).items():
+            if isinstance(obj, type) and issubclass(obj, RayAgent) and obj is not RayAgent:
+                return obj
+    except ImportError:
+        pass
+
+    raise ImportError(f"No make_agent function or Agent subclass found in agents.{agent_name}.agent")
+
+agent_factory = _get_agent_factory()
 
 fastapi_app = FastAPI(title="{agent_name}")
 
@@ -185,11 +207,21 @@ def _is_langchain_agent(obj):
     return False
 
 
+def _is_rayai_agent(obj):
+    """Check if obj is a rayai.Agent instance."""
+    try:
+        from rayai import Agent as RayAgent
+        return isinstance(obj, RayAgent)
+    except ImportError:
+        return False
+
+
 @serve.deployment(name="{agent_name}")
 @serve.ingress(fastapi_app)
 class AgentDeployment:
     def __init__(self):
-        self.agent = make_agent()
+        # agent_factory can be a function (pydantic/langchain) or class (python)
+        self.agent = agent_factory()
         self.agent_type = self._detect_type()
 
     def _detect_type(self):
@@ -197,6 +229,8 @@ class AgentDeployment:
             return "pydantic_ai"
         if _is_langchain_agent(self.agent):
             return "langchain"
+        if _is_rayai_agent(self.agent):
+            return "rayai"
         if callable(self.agent):
             return "callable"
         return "unknown"
@@ -225,6 +259,11 @@ class AgentDeployment:
                         response = str(result)
                 else:
                     response = str(result)
+
+            elif self.agent_type == "rayai":
+                # rayai.Agent has async run method
+                result = await self.agent.run(request.query)
+                response = str(result)
 
             elif self.agent_type == "callable":
                 result = self.agent(request.query)
