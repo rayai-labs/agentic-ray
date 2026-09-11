@@ -910,3 +910,23 @@ async def test_resume_conflict_not_from_a_pause_in_progress_is_raised() -> None:
                 await sbx.resume(poll_interval_s=0.001)
         finally:
             await sbx._close_http_client()
+
+
+async def test_pause_without_wait_surfaces_a_request_timeout() -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            side_effect=httpx.ReadTimeout("slow")
+        )
+        get = router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = await AsyncSandbox.connect("sbx-1")
+        try:
+            with pytest.raises(SandboxTimeoutError):
+                await sbx.pause()
+            assert get.call_count == 0
+        finally:
+            await sbx._close_http_client()

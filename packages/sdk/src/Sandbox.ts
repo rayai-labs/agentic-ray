@@ -134,11 +134,13 @@ export class Sandbox {
    */
   private async _postAndRotateToken(
     endpoint: "resume" | "activate",
+    signal?: AbortSignal,
   ): Promise<string> {
     const raw = await request<ApiSandboxResponse>({
       method: "POST",
       url: `${this._config.baseUrl}/sandboxes/${this.id}/${endpoint}`,
       headers: { "X-API-Key": this._config.apiKey },
+      signal,
     })
     if (!raw.access_token) {
       throw new SandboxError(
@@ -380,17 +382,14 @@ export class Sandbox {
       Prefer: "respond-async",
     }
     if (!options.wait) {
-      try {
-        await request<unknown>({
-          method: "POST",
-          url,
-          headers,
-          signal: options.signal,
-        })
-      } catch (err) {
-        // The request outlived its own timeout; the pause carries on.
-        if (!(err instanceof TimeoutError)) throw err
-      }
+      // Any failure here, a timeout included, means the pause may not have
+      // been accepted; nothing is asserted on the caller's behalf.
+      await request<unknown>({
+        method: "POST",
+        url,
+        headers,
+        signal: options.signal,
+      })
       return
     }
     await this._underPauseDeadline(options, async (ctx) => {
@@ -431,14 +430,20 @@ export class Sandbox {
     } = {},
   ): Promise<void> {
     try {
-      await this._postAndRotateToken("resume")
+      await this._postAndRotateToken("resume", options.signal)
     } catch (err) {
       if (!(err instanceof ConflictError)) throw err
-      if ((await this.getInfo()).status !== "pausing") throw err
+      const current = await request<ApiSandboxResponse>({
+        method: "GET",
+        url: `${this._config.baseUrl}/sandboxes/${this.id}`,
+        headers: { "X-API-Key": this._config.apiKey },
+        signal: options.signal,
+      })
+      if (toSandboxInfo(current).status !== "pausing") throw err
       await this._underPauseDeadline(options, (ctx) =>
         this._pollUntilPaused(ctx, options.pollIntervalMs ?? 1000),
       )
-      await this._postAndRotateToken("resume")
+      await this._postAndRotateToken("resume", options.signal)
     }
   }
 

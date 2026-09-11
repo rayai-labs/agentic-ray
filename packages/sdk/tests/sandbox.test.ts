@@ -908,6 +908,67 @@ describe("Sandbox instance methods", () => {
     )
   })
 
+  it("sandbox.pause without wait surfaces a request timeout", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          (_url: string, init: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init.signal?.addEventListener(
+                "abort",
+                () => reject(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            }),
+        ),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox.pause().then(
+        () => {
+          outcome = "accepted"
+        },
+        (e: unknown) => {
+          outcome = e
+        },
+      )
+      await vi.advanceTimersByTimeAsync(30_100)
+      await pending
+      expect(outcome).toBeInstanceOf(TimeoutError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("sandbox.resume passes its signal to the resume POST and the conflict check", async () => {
+    const sandbox = await makeSandbox()
+    const controller = new AbortController()
+    const seen: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        seen.push(`${init.method} ${new URL(url).pathname}`)
+        if (init.signal?.aborted)
+          throw new DOMException("aborted", "AbortError")
+        if (init.method === "POST") {
+          controller.abort()
+          return jsonResponse({ error: { message: "pausing" } }, 409)
+        }
+        return jsonResponse(baseSandbox)
+      }),
+    )
+
+    await expect(
+      sandbox.resume({ signal: controller.signal }),
+    ).rejects.toBeInstanceOf(SandboxError)
+    expect(seen).toEqual([
+      "POST /sandboxes/sbx-1/resume",
+      "GET /sandboxes/sbx-1",
+    ])
+  })
+
   it("sandbox.attachSecret POSTs /secrets with env_key and secret_name", async () => {
     const sandbox = await makeSandbox()
     const mock = vi.fn(async () =>

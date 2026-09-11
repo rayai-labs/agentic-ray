@@ -430,8 +430,10 @@ class Sandbox:
         except DeadlineExceeded as exc:
             raise self._still_pausing(timeout) from exc
         except SandboxTimeoutError:
-            # The request outlived its own timeout; the pause carries on.
-            pass
+            # Without waiting there is no way to tell whether the pause was
+            # accepted; only a waiting call follows it through the status.
+            if not wait:
+                raise
         if wait:
             self._wait_until_paused(deadline, timeout, poll_interval_s)
 
