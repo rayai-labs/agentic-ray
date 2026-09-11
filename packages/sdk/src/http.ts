@@ -176,6 +176,8 @@ async function retryableFetch(
     maxAttempts?: number
     retryable: boolean
     userSignal?: AbortSignal
+    /** Keep the attempt timer running until the caller releases the response. */
+    timeoutCoversBody?: boolean
   },
 ): Promise<{ res: Response; release: () => void }> {
   const maxAttempts = opts.retryable
@@ -199,6 +201,10 @@ async function retryableFetch(
     // the body read and releases it afterwards; a retried attempt releases
     // its own here.
     let handedOff = false
+    const done = () => {
+      clearTimeout(timer)
+      release()
+    }
 
     try {
       const res = await fetch(input, { ...init, signal })
@@ -207,7 +213,7 @@ async function retryableFetch(
       if (opts.retryable && RETRYABLE_STATUSES.has(res.status)) {
         if (attempt >= maxAttempts) {
           handedOff = true
-          return { res, release }
+          return { res, release: done }
         }
         let delay: number | null = null
         if (res.status === 429) {
@@ -228,7 +234,7 @@ async function retryableFetch(
       }
 
       handedOff = true
-      return { res, release }
+      return { res, release: done }
     } catch (err) {
       lastError = err
 
@@ -255,8 +261,8 @@ async function retryableFetch(
 
       throw err
     } finally {
-      clearTimeout(timer)
-      if (!handedOff) release()
+      if (!handedOff) done()
+      else if (!opts.timeoutCoversBody) clearTimeout(timer)
     }
   }
 
@@ -308,7 +314,7 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
         headers: mergedHeaders,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       },
-      { timeoutMs, retryable, userSignal },
+      { timeoutMs, retryable, userSignal, timeoutCoversBody: true },
     )
     try {
       if (!res.ok) {
@@ -338,6 +344,10 @@ export async function request<T>(opts: RequestOptions): Promise<T> {
   } catch (err) {
     if (err instanceof SandboxError) throw err
     if (err instanceof DOMException && err.name === "AbortError") {
+      // Past the headers only the attempt timer and the caller can abort.
+      if (!userSignal?.aborted) {
+        throw new TimeoutError(`Request timed out after ${timeoutMs}ms`)
+      }
       throw new SandboxError("Request aborted", undefined, undefined, {
         cause: err,
       })

@@ -972,6 +972,7 @@ def test_sync_read_deadline_cuts_a_stalled_response(
 ) -> None:
     server = stalling_server(stall_in)
     client = httpx.Client()
+    before = set(threading.enumerate())
     try:
         started = time.monotonic()
         with pytest.raises(SandboxTimeoutError):
@@ -985,6 +986,8 @@ def test_sync_read_deadline_cuts_a_stalled_response(
                 deadline=time.monotonic() + 0.2,
             )
         assert time.monotonic() - started < 1.5
+        # The abandoned exchange must not be able to pin the process.
+        assert all(t.daemon for t in threading.enumerate() if t not in before)
     finally:
         client.close()
 
@@ -1094,6 +1097,25 @@ def test_pause_without_wait_surfaces_a_request_timeout() -> None:
         try:
             with pytest.raises(SandboxTimeoutError):
                 sbx.pause()
+            assert get.call_count == 0
+        finally:
+            sbx._close_http_client()
+
+
+def test_pause_with_wait_returns_at_once_on_a_synchronous_204() -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            return_value=httpx.Response(204)
+        )
+        get = router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = Sandbox.connect("sbx-1")
+        try:
+            sbx.pause(wait=True)
             assert get.call_count == 0
         finally:
             sbx._close_http_client()

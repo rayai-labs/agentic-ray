@@ -37,6 +37,48 @@ function installFetch(
 }
 
 describe("http.request", () => {
+  it("maps a body read cut by the attempt timer to TimeoutError", async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          const body = new ReadableStream<Uint8Array>({
+            start(stream) {
+              init.signal?.addEventListener(
+                "abort",
+                () => stream.error(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            },
+          })
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = request({
+        method: "GET",
+        url: "https://api.example.com/x",
+        timeoutMs: 50,
+      }).then(
+        (v) => {
+          outcome = v
+        },
+        (e: unknown) => {
+          outcome = e
+        },
+      )
+      await vi.advanceTimersByTimeAsync(60)
+      await pending
+      expect(outcome).toBeInstanceOf(TimeoutError)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()

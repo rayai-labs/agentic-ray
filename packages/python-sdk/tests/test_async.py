@@ -930,3 +930,22 @@ async def test_pause_without_wait_surfaces_a_request_timeout() -> None:
             assert get.call_count == 0
         finally:
             await sbx._close_http_client()
+
+
+async def test_pause_with_wait_returns_at_once_on_a_synchronous_204() -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        router.post(f"{API}/sandboxes/sbx-1/pause").mock(
+            return_value=httpx.Response(204)
+        )
+        get = router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = await AsyncSandbox.connect("sbx-1")
+        try:
+            await sbx.pause(wait=True)
+            assert get.call_count == 0
+        finally:
+            await sbx._close_http_client()

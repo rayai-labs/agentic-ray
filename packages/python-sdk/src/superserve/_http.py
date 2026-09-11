@@ -7,12 +7,12 @@ connection pooling and retry logic for idempotent methods (GET, DELETE).
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 from asyncio import TimeoutError as _AsyncTimeout
 from asyncio import wait_for as _wait_for
 import json as json_module
 import random
 import sys
+import threading
 import time
 from collections.abc import AsyncIterable, Callable, Iterable
 from email.utils import parsedate_to_datetime
@@ -189,8 +189,9 @@ def _read_within(
     """One attempt. With a deadline the whole exchange, headers and body, runs
     on a worker and the caller waits only for what is left of the deadline:
     the HTTP timeout bounds inactivity, not wall time, and a blocking read
-    cannot be interrupted, so a worker that outlives the deadline winds down
-    on its own read timeout."""
+    cannot be interrupted. The worker is a daemon thread, so one that outlives
+    the deadline never pins the process; it winds down on its own read
+    timeout."""
     if deadline is None:
         return client.request(
             method, url, headers=headers, json=json_body, timeout=timeout
@@ -214,13 +215,23 @@ def _read_within(
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise DeadlineExceeded("Operation deadline exceeded")
-    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    try:
-        return pool.submit(exchange).result(timeout=remaining)
-    except concurrent.futures.TimeoutError as exc:
-        raise DeadlineExceeded("Operation deadline exceeded") from exc
-    finally:
-        pool.shutdown(wait=False)
+    outcome: list[httpx.Response | Exception] = []
+
+    def run() -> None:
+        try:
+            outcome.append(exchange())
+        except Exception as exc:
+            outcome.append(exc)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(remaining)
+    if not outcome:
+        raise DeadlineExceeded("Operation deadline exceeded")
+    result = outcome[0]
+    if isinstance(result, Exception):
+        raise result
+    return result
 
 
 async def _async_read_within(

@@ -705,6 +705,53 @@ describe("Sandbox instance methods", () => {
     }
   })
 
+  it("sandbox.pause cuts a stalled poll body at the request timeout and polls again", async () => {
+    const sandbox = await makeSandbox()
+    vi.useFakeTimers()
+    try {
+      let gets = 0
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          if (init.method === "POST")
+            return jsonResponse({ status: "pausing" }, 202)
+          if (++gets > 1)
+            return jsonResponse({ ...baseSandbox, status: "paused" })
+          const body = new ReadableStream<Uint8Array>({
+            start(stream) {
+              init.signal?.addEventListener(
+                "abort",
+                () => stream.error(new DOMException("aborted", "AbortError")),
+                { once: true },
+              )
+            },
+          })
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        }),
+      )
+      let outcome: unknown = "pending"
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 120_000, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
+      await vi.advanceTimersByTimeAsync(30_100)
+      await pending
+      expect(outcome).toBe("paused")
+      expect(gets).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("sandbox.pause treats a sandbox deleted on pause as completed", async () => {
     const sandbox = await makeSandbox()
     const mock = vi

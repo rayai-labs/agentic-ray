@@ -420,7 +420,7 @@ class Sandbox:
         self._require_not_deleted()
         deadline = time.monotonic() + timeout
         try:
-            api_request(
+            raw = api_request(
                 "POST",
                 f"{self._config.base_url}/sandboxes/{self.id}/pause",
                 headers={"X-API-Key": self._config.api_key, "Prefer": "respond-async"},
@@ -434,7 +434,9 @@ class Sandbox:
             # accepted; only a waiting call follows it through the status.
             if not wait:
                 raise
-        if wait:
+            raw = {"status": "pausing"}
+        # A 204 means the pause already completed; only an accepted one is followed.
+        if wait and isinstance(raw, dict) and raw.get("status") == "pausing":
             self._wait_until_paused(deadline, timeout, poll_interval_s)
 
     def _wait_until_paused(
