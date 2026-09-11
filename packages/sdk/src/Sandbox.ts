@@ -348,14 +348,8 @@ export class Sandbox {
   }
 
   /**
-   * Pause this sandbox and return once it is `paused`. All running processes
-   * and file state are preserved.
-   *
-   * `timeoutMs` bounds the whole wait (five minutes by default: a pause can
-   * take a while on a busy host), covering every request, retry, and poll.
-   * If the host has not finished by then a `TimeoutError` is thrown but the
-   * pause itself carries on; `getInfo()` reports `paused` once it lands.
-   * `signal` stops waiting at any point.
+   * Pause this sandbox. The sandbox transitions to `paused`.
+   * All running processes and file state are preserved.
    */
   async pause(
     options: {

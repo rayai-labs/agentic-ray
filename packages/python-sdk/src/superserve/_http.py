@@ -23,8 +23,8 @@ import httpx
 from .errors import SandboxError, SandboxTimeoutError, ValidationError, map_api_error
 
 DEFAULT_TIMEOUT = 30.0
-# How long pause() waits for the host to finish, across every request it
-# makes; each request still gets the ordinary timeout.
+# How long pause() waits, across every request it makes; each request still
+# gets the ordinary timeout.
 DEFAULT_PAUSE_TIMEOUT = 300.0
 
 DEFAULT_MAX_DOWNLOAD_BYTES = (

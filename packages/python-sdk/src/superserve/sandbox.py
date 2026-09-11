@@ -408,13 +408,7 @@ class Sandbox:
     def pause(
         self, *, timeout: float = DEFAULT_PAUSE_TIMEOUT, poll_interval_s: float = 1.0
     ) -> None:
-        """Pause this sandbox and return once it is ``paused``.
-
-        ``timeout`` bounds the whole wait (five minutes by default: a pause
-        can take a while on a busy host). If the host has not finished by
-        then, :class:`SandboxTimeoutError` is raised but the pause itself
-        carries on; ``get_info()`` reports ``paused`` once it lands.
-        """
+        """Pause this sandbox. The sandbox transitions to ``paused``."""
         self._require_not_deleted()
         deadline = time.monotonic() + timeout
         headers = {"X-API-Key": self._config.api_key}
