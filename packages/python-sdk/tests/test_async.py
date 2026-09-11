@@ -949,3 +949,25 @@ async def test_pause_with_wait_returns_at_once_on_a_synchronous_204() -> None:
             assert get.call_count == 0
         finally:
             await sbx._close_http_client()
+
+
+async def test_resume_retries_at_once_when_the_conflict_check_sees_paused() -> None:
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes/sbx-1/activate").mock(
+            return_value=httpx.Response(200, json=_raw())
+        )
+        resume = router.post(f"{API}/sandboxes/sbx-1/resume").mock(
+            side_effect=[
+                httpx.Response(409, json={"error": {"message": "pausing"}}),
+                httpx.Response(200, json=_raw(access_token="tok-2")),
+            ]
+        )
+        router.get(f"{API}/sandboxes/sbx-1").mock(
+            return_value=httpx.Response(200, json=_raw(status="paused"))
+        )
+        sbx = await AsyncSandbox.connect("sbx-1")
+        try:
+            await sbx.resume(poll_interval_s=0.001)
+            assert resume.call_count == 2
+        finally:
+            await sbx._close_http_client()

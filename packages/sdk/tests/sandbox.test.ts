@@ -989,6 +989,29 @@ describe("Sandbox instance methods", () => {
     }
   })
 
+  it("sandbox.resume retries at once when the conflict check already sees paused", async () => {
+    const sandbox = await makeSandbox()
+    const seen: string[] = []
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        seen.push(`${init.method} ${new URL(url).pathname}`)
+        if (init.method === "GET")
+          return jsonResponse({ ...baseSandbox, status: "paused" })
+        if (seen.length === 1)
+          return jsonResponse({ error: { message: "pausing" } }, 409)
+        return jsonResponse({ ...baseSandbox, access_token: "tok-2" })
+      }),
+    )
+
+    await sandbox.resume({ pollIntervalMs: 1 })
+    expect(seen).toEqual([
+      "POST /sandboxes/sbx-1/resume",
+      "GET /sandboxes/sbx-1",
+      "POST /sandboxes/sbx-1/resume",
+    ])
+  })
+
   it("sandbox.resume passes its signal to the resume POST and the conflict check", async () => {
     const sandbox = await makeSandbox()
     const controller = new AbortController()

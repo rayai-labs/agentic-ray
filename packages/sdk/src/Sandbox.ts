@@ -439,10 +439,14 @@ export class Sandbox {
         headers: { "X-API-Key": this._config.apiKey },
         signal: options.signal,
       })
-      if (toSandboxInfo(current).status !== "pausing") throw err
-      await this._underPauseDeadline(options, (ctx) =>
-        this._pollUntilPaused(ctx, options.pollIntervalMs ?? 1000),
-      )
+      // A pause that finished between the two requests reads as paused here.
+      const { status } = toSandboxInfo(current)
+      if (status !== "pausing" && status !== "paused") throw err
+      if (status === "pausing") {
+        await this._underPauseDeadline(options, (ctx) =>
+          this._pollUntilPaused(ctx, options.pollIntervalMs ?? 1000),
+        )
+      }
       await this._postAndRotateToken("resume", options.signal)
     }
   }

@@ -491,11 +491,14 @@ class Sandbox:
         try:
             self._post_and_rotate_token("resume")
         except ConflictError:
-            if self.get_info().status != SandboxStatus.PAUSING:
+            # A pause that finished between the two requests reads as paused here.
+            status = self.get_info().status
+            if status not in (SandboxStatus.PAUSING, SandboxStatus.PAUSED):
                 raise
-            self._wait_until_paused(
-                time.monotonic() + timeout, timeout, poll_interval_s
-            )
+            if status == SandboxStatus.PAUSING:
+                self._wait_until_paused(
+                    time.monotonic() + timeout, timeout, poll_interval_s
+                )
             self._post_and_rotate_token("resume")
 
     def kill(self) -> None:
