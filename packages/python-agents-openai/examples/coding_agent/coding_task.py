@@ -16,14 +16,14 @@ from pathlib import Path
 from agents import ModelSettings, Runner
 from agents.items import ToolCallItem
 from agents.run import RunConfig
-from agents.sandbox import Manifest, SandboxAgent, SandboxRunConfig
+from agents.sandbox import Manifest, SandboxAgent, SandboxPathGrant, SandboxRunConfig
 from agents.sandbox.session.sandbox_session import SandboxSession
 from agents.sandbox.capabilities import LocalDirLazySkillSource, Skills
 from agents.sandbox.capabilities.capabilities import Capabilities
 from agents.sandbox.entries import LocalDir
 from superserve_agents_openai import SuperserveSandboxClient
 
-DEFAULT_MODEL = "gpt-5.6-sol"
+DEFAULT_MODEL = "gpt-4o"
 TARGET_TEST_CMD = "sh tests/test_credit_note.sh"
 DEFAULT_PROMPT = (
     "Open `repo/task.md`, use the `$credit-note-fixer` skill, fix the bug, run "
@@ -50,7 +50,10 @@ def build_agent(model: str) -> SandboxAgent[None]:
         default_manifest=Manifest(
             entries={
                 "repo": LocalDir(src=EXAMPLE_DIR / "repo"),
-            }
+            },
+            extra_path_grants=(
+                SandboxPathGrant(path=str(EXAMPLE_DIR)),
+            ),
         ),
         capabilities=Capabilities.default()
         + [

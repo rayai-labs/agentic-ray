@@ -44,3 +44,11 @@ def test_client_defaults():
     client = SuperserveSandboxClient()
     assert client.backend_id == "superserve"
     assert client.supports_default_options is True
+
+
+def test_client_options_api_key_hidden_in_repr():
+    options = SuperserveSandboxClientOptions(api_key="ss_secret_live_key_999")
+    assert options.api_key == "ss_secret_live_key_999"
+    assert "ss_secret_live_key_999" not in repr(options)
+    assert "ss_secret_live_key_999" not in str(options)
+

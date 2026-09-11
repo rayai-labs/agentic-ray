@@ -56,7 +56,7 @@ class SuperserveSandboxSession(BaseSandboxSession):
         try:
             await self._sandbox.kill()
         except Exception as e:
-            logger.debug("Failed to cleanly kill sandbox microVM: %s", e)
+            logger.warning("Failed to cleanly kill sandbox microVM: %s", e)
 
     async def _exec_internal(
         self,
@@ -157,6 +157,8 @@ class SuperserveSandboxSession(BaseSandboxSession):
             ) from e
 
     async def running(self) -> bool:
+        if getattr(self._sandbox, "_closed", False):
+            return False
         try:
             info = await self._sandbox.get_info()
             return info.status in (
@@ -164,7 +166,10 @@ class SuperserveSandboxSession(BaseSandboxSession):
                 SandboxStatus.STARTING,
                 SandboxStatus.RESUMING,
             )
-        except Exception:
+        except NotFoundError:
+            return False
+        except Exception as e:
+            logger.warning("Unexpected error querying sandbox running status: %s", e)
             return False
 
     async def persist_workspace(self) -> io.IOBase:

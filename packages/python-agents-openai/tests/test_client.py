@@ -1,13 +1,15 @@
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from agents.sandbox.manifest import Manifest
 from agents.sandbox.session.sandbox_session import SandboxSession
-from superserve.types import SandboxInfo, SandboxStatus
+from superserve.types import PreviewAccess, SandboxInfo, SandboxStatus
 from superserve_agents_openai import (
     SuperserveSandboxClient,
     SuperserveSandboxClientOptions,
 )
+from superserve_agents_openai.client import SuperserveSandboxSessionState
 from superserve_agents_openai.session import SuperserveSandboxSession
 
 
@@ -21,8 +23,8 @@ def mock_async_sandbox():
             id="sbx_test_456",
             name="openai-agent-sandbox",
             status=SandboxStatus.ACTIVE,
-            created_at="2026-09-10T12:00:00Z",
-            preview_access="private",
+            created_at=datetime(2026, 9, 10, 12, 0, 0, tzinfo=timezone.utc),
+            preview_access=PreviewAccess("private"),
         )
     )
     return sandbox
@@ -45,6 +47,7 @@ async def test_client_create_and_delete(mock_async_sandbox):
         inner = getattr(session, "_inner", session)
         assert isinstance(inner, SuperserveSandboxSession)
         assert inner.state.sandbox_id == "sbx_test_456"
+        assert isinstance(session.state, SuperserveSandboxSessionState)
         assert session.state.sandbox_id == "sbx_test_456"
         mock_create.assert_awaited_once()
 
@@ -52,6 +55,26 @@ async def test_client_create_and_delete(mock_async_sandbox):
         deleted_session = await client.delete(session)
         assert deleted_session is session
         mock_async_sandbox.kill.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_client_create_failure_kills_sandbox(mock_async_sandbox):
+    client = SuperserveSandboxClient(
+        SuperserveSandboxClientOptions(api_key="ss_test_key")
+    )
+    with patch(
+        "superserve.async_sandbox.AsyncSandbox.create",
+        new_callable=AsyncMock,
+        return_value=mock_async_sandbox,
+    ), patch(
+        "superserve_agents_openai.client.resolve_snapshot",
+        side_effect=RuntimeError("Snapshot resolution failed"),
+    ):
+        with pytest.raises(RuntimeError, match="Snapshot resolution failed"):
+            await client.create()
+
+        mock_async_sandbox.kill.assert_awaited_once()
+
 
 
 def test_sandbox_run_config_accepts_client():

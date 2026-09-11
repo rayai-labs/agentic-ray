@@ -66,17 +66,21 @@ class SuperserveSandboxClient(BaseSandboxClient[SuperserveSandboxClientOptions])
             base_url=opts.base_url,
         )
 
-        session_id = uuid.uuid4()
-        snapshot_instance = resolve_snapshot(snapshot, str(session_id))
-        state = SuperserveSandboxSessionState(
-            session_id=session_id,
-            manifest=manifest,
-            snapshot=snapshot_instance,
-            sandbox_id=sandbox.id,
-        )
+        try:
+            session_id = uuid.uuid4()
+            snapshot_instance = resolve_snapshot(snapshot, str(session_id))
+            state = SuperserveSandboxSessionState(
+                session_id=session_id,
+                manifest=manifest,
+                snapshot=snapshot_instance,
+                sandbox_id=sandbox.id,
+            )
 
-        inner = SuperserveSandboxSession(state=state, sandbox=sandbox)
-        return self._wrap_session(inner)
+            inner = SuperserveSandboxSession(state=state, sandbox=sandbox)
+            return self._wrap_session(inner)
+        except BaseException:
+            await sandbox.kill()
+            raise
 
     async def delete(self, session: SandboxSession) -> SandboxSession:
         await session.shutdown()

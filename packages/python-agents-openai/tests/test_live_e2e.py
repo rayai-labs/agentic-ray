@@ -8,6 +8,7 @@ from agents.sandbox import SandboxPathGrant
 from agents.sandbox.entries import LocalDir
 from agents.sandbox.manifest import Manifest
 from superserve_agents_openai import SuperserveSandboxClient
+from superserve_agents_openai.client import SuperserveSandboxSessionState
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("SUPERSERVE_API_KEY"),
@@ -20,6 +21,7 @@ async def test_live_superserve_sandbox_lifecycle():
     client = SuperserveSandboxClient()
     manifest = Manifest(root="/workspace")
     session = await client.create(manifest=manifest)
+    assert isinstance(session.state, SuperserveSandboxSessionState)
     assert session.state.sandbox_id is not None
 
     try:

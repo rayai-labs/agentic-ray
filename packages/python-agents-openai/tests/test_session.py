@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import io
 import uuid
 from pathlib import Path
@@ -6,7 +7,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from agents.sandbox.manifest import Manifest
 from agents.sandbox.snapshot import resolve_snapshot
-from superserve.types import CommandResult, SandboxInfo, SandboxStatus
+from superserve.errors import NotFoundError
+from superserve.types import CommandResult, PreviewAccess, SandboxInfo, SandboxStatus
 from superserve_agents_openai.client import SuperserveSandboxSessionState
 from superserve_agents_openai.session import SuperserveSandboxSession
 
@@ -15,6 +17,7 @@ from superserve_agents_openai.session import SuperserveSandboxSession
 def mock_sandbox():
     sandbox = MagicMock()
     sandbox.id = "sbx_test_123"
+    sandbox._closed = False
     sandbox.commands = MagicMock()
     sandbox.commands.run = AsyncMock(
         return_value=CommandResult(stdout="hello\n", stderr="", exit_code=0)
@@ -27,8 +30,8 @@ def mock_sandbox():
             id="sbx_test_123",
             name="test-sandbox",
             status=SandboxStatus.ACTIVE,
-            created_at="2026-09-10T12:00:00Z",
-            preview_access="private",
+            created_at=datetime(2026, 9, 10, 12, 0, 0, tzinfo=timezone.utc),
+            preview_access=PreviewAccess("private"),
         )
     )
     return sandbox
@@ -78,6 +81,29 @@ async def test_running(session, mock_sandbox):
     is_running = await session.running()
     assert is_running is True
     mock_sandbox.get_info.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_running_when_sandbox_closed(session, mock_sandbox):
+    mock_sandbox._closed = True
+    is_running = await session.running()
+    assert is_running is False
+    mock_sandbox.get_info.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_running_when_not_found(session, mock_sandbox):
+    mock_sandbox.get_info.side_effect = NotFoundError("sandbox not found")
+    is_running = await session.running()
+    assert is_running is False
+
+
+@pytest.mark.asyncio
+async def test_running_when_unexpected_error(session, mock_sandbox):
+    mock_sandbox.get_info.side_effect = RuntimeError("network outage")
+    is_running = await session.running()
+    assert is_running is False
+
 
 
 @pytest.mark.asyncio
