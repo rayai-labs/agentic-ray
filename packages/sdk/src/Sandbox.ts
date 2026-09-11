@@ -16,7 +16,12 @@
 
 import { Commands } from "./commands.js"
 import { previewUrl, type ResolvedConfig, resolveConfig } from "./config.js"
-import { NotFoundError, SandboxError, TimeoutError } from "./errors.js"
+import {
+  ConflictError,
+  NotFoundError,
+  SandboxError,
+  TimeoutError,
+} from "./errors.js"
 import { Files } from "./files.js"
 import {
   composeSignals,
@@ -48,6 +53,13 @@ import { toNetworkLogPage, toSandboxInfo } from "./types.js"
 
 /** How long `pause()` waits for the host across every request it makes. */
 const DEFAULT_PAUSE_TIMEOUT_MS = 300_000
+
+type PauseWait = {
+  signal: AbortSignal
+  deadline: AbortSignal
+  timeoutMs: number
+  stillPausing: () => TimeoutError
+}
 
 export class Sandbox {
   /** Unique sandbox ID (UUID). */
@@ -350,18 +362,95 @@ export class Sandbox {
   /**
    * Pause this sandbox. The sandbox transitions to `paused`.
    * All running processes and file state are preserved.
+   *
+   * Returns once the pause is accepted; with `wait: true` it returns once the
+   * sandbox is `paused`.
    */
   async pause(
+    options: {
+      wait?: boolean
+      timeoutMs?: number
+      pollIntervalMs?: number
+      signal?: AbortSignal
+    } = {},
+  ): Promise<void> {
+    const url = `${this._config.baseUrl}/sandboxes/${this.id}/pause`
+    const headers = {
+      "X-API-Key": this._config.apiKey,
+      Prefer: "respond-async",
+    }
+    if (!options.wait) {
+      try {
+        await request<unknown>({
+          method: "POST",
+          url,
+          headers,
+          signal: options.signal,
+        })
+      } catch (err) {
+        // The request outlived its own timeout; the pause carries on.
+        if (!(err instanceof TimeoutError)) throw err
+      }
+      return
+    }
+    await this._underPauseDeadline(options, async (ctx) => {
+      let raw: { status?: string } | undefined
+      try {
+        raw = await request<{ status?: string } | undefined>({
+          method: "POST",
+          url,
+          headers,
+          timeoutMs: Math.min(DEFAULT_TIMEOUT_MS, ctx.timeoutMs),
+          signal: ctx.signal,
+        })
+      } catch (err) {
+        // The request outlived its own timeout; the pause may still land.
+        // Follow it through the sandbox's status like an accepted one.
+        if (err instanceof TimeoutError && !ctx.deadline.aborted) {
+          raw = { status: "pausing" }
+        } else {
+          throw err
+        }
+      }
+      if (raw?.status !== "pausing") return
+      await this._pollUntilPaused(ctx, options.pollIntervalMs ?? 1000)
+    })
+  }
+
+  /**
+   * Resume a paused sandbox. Status transitions back to `active`. A pause
+   * still in progress is waited out first.
+   * The access token is rotated; `sandbox.commands` and `sandbox.files` pick
+   * up the fresh token transparently.
+   */
+  async resume(
     options: {
       timeoutMs?: number
       pollIntervalMs?: number
       signal?: AbortSignal
     } = {},
   ): Promise<void> {
+    try {
+      await this._postAndRotateToken("resume")
+    } catch (err) {
+      if (!(err instanceof ConflictError)) throw err
+      if ((await this.getInfo()).status !== "pausing") throw err
+      await this._underPauseDeadline(options, (ctx) =>
+        this._pollUntilPaused(ctx, options.pollIntervalMs ?? 1000),
+      )
+      await this._postAndRotateToken("resume")
+    }
+  }
+
+  /**
+   * Runs body under one operation deadline, enforced as a signal so it reaches
+   * into requests, their retries and backoff, and body reads. @internal
+   */
+  private async _underPauseDeadline(
+    options: { timeoutMs?: number; signal?: AbortSignal },
+    body: (ctx: PauseWait) => Promise<void>,
+  ): Promise<void> {
     const timeoutMs = options.timeoutMs ?? DEFAULT_PAUSE_TIMEOUT_MS
-    const pollMs = options.pollIntervalMs ?? 1000
-    // One deadline for the whole operation, enforced as a signal so it
-    // reaches into requests, their retries and backoff, and body reads.
     const deadline = new AbortController()
     const deadlineTimer = setTimeout(() => deadline.abort(), timeoutMs)
     const { signal, release } = composeSignals(deadline.signal, options.signal)
@@ -370,55 +459,7 @@ export class Sandbox {
         `Sandbox ${this.id} is still pausing after ${timeoutMs}ms; it will finish in the background`,
       )
     try {
-      let raw: { status?: string } | undefined
-      try {
-        raw = await request<{ status?: string } | undefined>({
-          method: "POST",
-          url: `${this._config.baseUrl}/sandboxes/${this.id}/pause`,
-          headers: {
-            "X-API-Key": this._config.apiKey,
-            Prefer: "respond-async",
-          },
-          timeoutMs: Math.min(DEFAULT_TIMEOUT_MS, timeoutMs),
-          signal,
-        })
-      } catch (err) {
-        // The request outlived its own timeout; the pause may still land.
-        // Follow it through the sandbox's status like an accepted one.
-        if (err instanceof TimeoutError && !deadline.signal.aborted) {
-          raw = { status: "pausing" }
-        } else {
-          throw err
-        }
-      }
-      if (raw?.status !== "pausing") return
-      while (true) {
-        await sleep(pollMs, signal)
-        let info: ApiSandboxResponse
-        try {
-          info = await request<ApiSandboxResponse>({
-            method: "GET",
-            url: `${this._config.baseUrl}/sandboxes/${this.id}`,
-            headers: { "X-API-Key": this._config.apiKey },
-            signal,
-          })
-        } catch (err) {
-          // Gone while pausing: auto-delete on pause removes the sandbox as
-          // soon as the pause lands, so there is nothing left to wait for.
-          if (err instanceof NotFoundError) return
-          // One slow poll; the operation deadline decides whether to go on.
-          if (err instanceof TimeoutError && !deadline.signal.aborted) continue
-          throw err
-        }
-        if (deadline.signal.aborted) throw stillPausing()
-        const { status } = toSandboxInfo(info)
-        if (status === "paused" || status === "deleted") return
-        if (status !== "pausing") {
-          throw new SandboxError(
-            `Sandbox ${this.id} did not pause: status is ${status}`,
-          )
-        }
-      }
+      await body({ signal, deadline: deadline.signal, timeoutMs, stillPausing })
     } catch (err) {
       // Whatever was in flight when the deadline fired ended because of it.
       if (deadline.signal.aborted && !options.signal?.aborted) {
@@ -432,12 +473,38 @@ export class Sandbox {
   }
 
   /**
-   * Resume a paused sandbox. Status transitions back to `active`.
-   * The access token is rotated; `sandbox.commands` and `sandbox.files` pick
-   * up the fresh token transparently.
+   * Polls until the sandbox is `paused`. A sandbox deleted meanwhile (delete
+   * on pause) counts as done; `failed` throws. @internal
    */
-  async resume(): Promise<void> {
-    await this._postAndRotateToken("resume")
+  private async _pollUntilPaused(
+    ctx: PauseWait,
+    pollMs: number,
+  ): Promise<void> {
+    while (true) {
+      await sleep(pollMs, ctx.signal)
+      let info: ApiSandboxResponse
+      try {
+        info = await request<ApiSandboxResponse>({
+          method: "GET",
+          url: `${this._config.baseUrl}/sandboxes/${this.id}`,
+          headers: { "X-API-Key": this._config.apiKey },
+          signal: ctx.signal,
+        })
+      } catch (err) {
+        if (err instanceof NotFoundError) return
+        // One slow poll; the operation deadline decides whether to go on.
+        if (err instanceof TimeoutError && !ctx.deadline.aborted) continue
+        throw err
+      }
+      if (ctx.deadline.aborted) throw ctx.stillPausing()
+      const { status } = toSandboxInfo(info)
+      if (status === "paused" || status === "deleted") return
+      if (status !== "pausing") {
+        throw new SandboxError(
+          `Sandbox ${this.id} did not pause: status is ${status}`,
+        )
+      }
+    }
   }
 
   /**

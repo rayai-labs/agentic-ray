@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { SandboxError, TimeoutError, ValidationError } from "../src/errors.js"
+import {
+  ConflictError,
+  SandboxError,
+  TimeoutError,
+  ValidationError,
+} from "../src/errors.js"
 import { Sandbox } from "../src/Sandbox.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -372,7 +377,9 @@ describe("Sandbox instance methods", () => {
       .mockResolvedValueOnce(jsonResponse({ ...baseSandbox, status: "paused" }))
     vi.stubGlobal("fetch", mock)
 
-    await expect(sandbox.pause({ pollIntervalMs: 1 })).resolves.toBeUndefined()
+    await expect(
+      sandbox.pause({ wait: true, pollIntervalMs: 1 }),
+    ).resolves.toBeUndefined()
 
     const [, init] = mock.mock.calls[0] as [string, RequestInit]
     expect((init.headers as Record<string, string>).Prefer).toBe(
@@ -394,9 +401,9 @@ describe("Sandbox instance methods", () => {
       )
     vi.stubGlobal("fetch", mock)
 
-    await expect(sandbox.pause({ pollIntervalMs: 1 })).rejects.toThrow(
-      /did not pause/,
-    )
+    await expect(
+      sandbox.pause({ wait: true, pollIntervalMs: 1 }),
+    ).rejects.toThrow(/did not pause/)
   })
 
   it("sandbox.pause times out while the sandbox is still pausing", async () => {
@@ -410,7 +417,7 @@ describe("Sandbox instance methods", () => {
     vi.stubGlobal("fetch", mock)
 
     await expect(
-      sandbox.pause({ timeoutMs: 30, pollIntervalMs: 1 }),
+      sandbox.pause({ wait: true, timeoutMs: 30, pollIntervalMs: 1 }),
     ).rejects.toBeInstanceOf(TimeoutError)
   })
 
@@ -433,7 +440,7 @@ describe("Sandbox instance methods", () => {
         }),
       )
       let outcome: unknown = "pending"
-      const pending = sandbox.pause().then(
+      const pending = sandbox.pause({ wait: true }).then(
         () => {
           outcome = "paused"
         },
@@ -470,14 +477,16 @@ describe("Sandbox instance methods", () => {
         }),
       )
       let outcome: unknown = "pending"
-      const pending = sandbox.pause({ timeoutMs: 40, pollIntervalMs: 10 }).then(
-        () => {
-          outcome = "paused"
-        },
-        (e: unknown) => {
-          outcome = e
-        },
-      )
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
       await vi.advanceTimersByTimeAsync(41)
       const atDeadline = outcome
       await vi.advanceTimersByTimeAsync(100)
@@ -513,6 +522,7 @@ describe("Sandbox instance methods", () => {
       let outcome: unknown = "pending"
       const pending = sandbox
         .pause({
+          wait: true,
           timeoutMs: 120_000,
           pollIntervalMs: 10,
           signal: controller.signal,
@@ -566,14 +576,16 @@ describe("Sandbox instance methods", () => {
         }),
       )
       let outcome: unknown = "pending"
-      const pending = sandbox.pause({ timeoutMs: 40, pollIntervalMs: 10 }).then(
-        () => {
-          outcome = "paused"
-        },
-        (e: unknown) => {
-          outcome = e
-        },
-      )
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
       await vi.advanceTimersByTimeAsync(41)
       const atDeadline = outcome
       await vi.advanceTimersByTimeAsync(1100)
@@ -612,6 +624,7 @@ describe("Sandbox instance methods", () => {
       let outcome: unknown = "pending"
       const pending = sandbox
         .pause({
+          wait: true,
           timeoutMs: 120_000,
           pollIntervalMs: 10,
           signal: controller.signal,
@@ -672,14 +685,16 @@ describe("Sandbox instance methods", () => {
         }),
       )
       let outcome: unknown = "pending"
-      const pending = sandbox.pause({ timeoutMs: 40, pollIntervalMs: 10 }).then(
-        () => {
-          outcome = "paused"
-        },
-        (e: unknown) => {
-          outcome = e
-        },
-      )
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
       await vi.advanceTimersByTimeAsync(41)
       const atDeadline = outcome
       await vi.advanceTimersByTimeAsync(100)
@@ -698,7 +713,9 @@ describe("Sandbox instance methods", () => {
       .mockImplementation(async () => errorResponse(404, "not_found", "gone"))
     vi.stubGlobal("fetch", mock)
 
-    await expect(sandbox.pause({ pollIntervalMs: 1 })).resolves.toBeUndefined()
+    await expect(
+      sandbox.pause({ wait: true, pollIntervalMs: 1 }),
+    ).resolves.toBeUndefined()
   })
 
   it("sandbox.pause deadline still cuts a poll body read without AbortSignal.any", async () => {
@@ -740,14 +757,16 @@ describe("Sandbox instance methods", () => {
         }),
       )
       let outcome: unknown = "pending"
-      const pending = sandbox.pause({ timeoutMs: 40, pollIntervalMs: 10 }).then(
-        () => {
-          outcome = "paused"
-        },
-        (e: unknown) => {
-          outcome = e
-        },
-      )
+      const pending = sandbox
+        .pause({ wait: true, timeoutMs: 40, pollIntervalMs: 10 })
+        .then(
+          () => {
+            outcome = "paused"
+          },
+          (e: unknown) => {
+            outcome = e
+          },
+        )
       await vi.advanceTimersByTimeAsync(41)
       const atDeadline = outcome
       await vi.advanceTimersByTimeAsync(100)
@@ -783,7 +802,7 @@ describe("Sandbox instance methods", () => {
       )
       let outcome: unknown = "pending"
       const pending = sandbox
-        .pause({ timeoutMs: 120_000, pollIntervalMs: 10 })
+        .pause({ wait: true, timeoutMs: 120_000, pollIntervalMs: 10 })
         .then(
           () => {
             outcome = "paused"
@@ -823,7 +842,7 @@ describe("Sandbox instance methods", () => {
       )
       let outcome: unknown = "pending"
       const pending = sandbox
-        .pause({ timeoutMs: 120_000, pollIntervalMs: 10 })
+        .pause({ wait: true, timeoutMs: 120_000, pollIntervalMs: 10 })
         .then(
           () => {
             outcome = "paused"
@@ -839,6 +858,54 @@ describe("Sandbox instance methods", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("sandbox.pause returns once the pause is accepted, without polling", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi.fn(async () => jsonResponse({ status: "pausing" }, 202))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.pause()).resolves.toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("sandbox.resume waits out a pause in progress", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        errorResponse(409, "conflict", "not in a valid state"),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...baseSandbox, status: "pausing" }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...baseSandbox, status: "pausing" }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ...baseSandbox, status: "paused" }))
+      .mockResolvedValueOnce(
+        jsonResponse({ ...baseSandbox, access_token: "tok-2" }),
+      )
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.resume({ pollIntervalMs: 1 })).resolves.toBeUndefined()
+    expect(mock).toHaveBeenCalledTimes(5)
+    expect((mock.mock.calls[4] as [string, RequestInit])[1].method).toBe("POST")
+  })
+
+  it("sandbox.resume rethrows a conflict that is not a pause in progress", async () => {
+    const sandbox = await makeSandbox()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        errorResponse(409, "conflict", "not in a valid state"),
+      )
+      .mockResolvedValueOnce(jsonResponse({ ...baseSandbox, status: "active" }))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(sandbox.resume({ pollIntervalMs: 1 })).rejects.toBeInstanceOf(
+      ConflictError,
+    )
   })
 
   it("sandbox.attachSecret POSTs /secrets with env_key and secret_name", async () => {

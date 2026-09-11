@@ -13,7 +13,7 @@ import httpx
 from ._config import ResolvedConfig, preview_url, resolve_config
 from ._http import DEFAULT_PAUSE_TIMEOUT, DeadlineExceeded, api_request
 from .commands import Commands, CommandsDeps
-from .errors import NotFoundError, SandboxError, SandboxTimeoutError
+from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
 from .files import Files, FilesDeps
 from .types import (
     UNSET,
@@ -406,36 +406,45 @@ class Sandbox:
         return PreviewToken(**raw)
 
     def pause(
-        self, *, timeout: float = DEFAULT_PAUSE_TIMEOUT, poll_interval_s: float = 1.0
+        self,
+        *,
+        wait: bool = False,
+        timeout: float = DEFAULT_PAUSE_TIMEOUT,
+        poll_interval_s: float = 1.0,
     ) -> None:
-        """Pause this sandbox. The sandbox transitions to ``paused``."""
+        """Pause this sandbox. The sandbox transitions to ``paused``.
+
+        Returns once the pause is accepted; with ``wait=True`` it returns once
+        the sandbox is ``paused``.
+        """
         self._require_not_deleted()
         deadline = time.monotonic() + timeout
-        headers = {"X-API-Key": self._config.api_key}
-        still_pausing = SandboxTimeoutError(
-            f"Sandbox {self.id} is still pausing after {timeout}s; "
-            "it will finish in the background"
-        )
         try:
-            raw = api_request(
+            api_request(
                 "POST",
                 f"{self._config.base_url}/sandboxes/{self.id}/pause",
-                headers={**headers, "Prefer": "respond-async"},
-                budget=timeout,
+                headers={"X-API-Key": self._config.api_key, "Prefer": "respond-async"},
+                budget=timeout if wait else None,
                 client=self._http_client,
             )
         except DeadlineExceeded as exc:
-            raise still_pausing from exc
+            raise self._still_pausing(timeout) from exc
         except SandboxTimeoutError:
-            # The request outlived its own timeout; the pause may still land.
-            # Follow it through the sandbox's status like an accepted one.
-            raw = {"status": "pausing"}
-        if not (isinstance(raw, dict) and raw.get("status") == "pausing"):
-            return
+            # The request outlived its own timeout; the pause carries on.
+            pass
+        if wait:
+            self._wait_until_paused(deadline, timeout, poll_interval_s)
+
+    def _wait_until_paused(
+        self, deadline: float, timeout: float, poll_interval_s: float
+    ) -> None:
+        """Poll until the sandbox is ``paused``. A sandbox deleted meanwhile
+        (delete on pause) counts as done; ``failed`` raises."""
+        headers = {"X-API-Key": self._config.api_key}
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise still_pausing
+                raise self._still_pausing(timeout)
             time.sleep(min(poll_interval_s, remaining))
             try:
                 raw = api_request(
@@ -446,10 +455,8 @@ class Sandbox:
                     client=self._http_client,
                 )
             except DeadlineExceeded as exc:
-                raise still_pausing from exc
+                raise self._still_pausing(timeout) from exc
             except NotFoundError:
-                # Gone while pausing: auto-delete on pause removes the sandbox
-                # as soon as the pause lands, so there is nothing left to wait for.
                 return
             except SandboxTimeoutError:
                 # One slow poll; the deadline decides whether to keep going.
@@ -459,18 +466,33 @@ class Sandbox:
                 return
             if status != SandboxStatus.PAUSING:
                 raise SandboxError(
-                    f"Sandbox {self.id} did not pause: "
-                    f"status is {SandboxStatus(status).value}"
+                    f"Sandbox {self.id} did not pause: status is {SandboxStatus(status).value}"
                 )
 
-    def resume(self) -> None:
+    def _still_pausing(self, timeout: float) -> SandboxTimeoutError:
+        return SandboxTimeoutError(
+            f"Sandbox {self.id} is still pausing after {timeout}s; it will finish in the background"
+        )
+
+    def resume(
+        self, *, timeout: float = DEFAULT_PAUSE_TIMEOUT, poll_interval_s: float = 1.0
+    ) -> None:
         """Resume a paused sandbox.
 
-        The access token is rotated; ``sandbox.commands`` and ``sandbox.files``
-        pick up the fresh token transparently.
+        A pause still in progress is waited out first. The access token is
+        rotated; ``sandbox.commands`` and ``sandbox.files`` pick up the fresh
+        token transparently.
         """
         self._require_not_deleted()
-        self._post_and_rotate_token("resume")
+        try:
+            self._post_and_rotate_token("resume")
+        except ConflictError:
+            if self.get_info().status != SandboxStatus.PAUSING:
+                raise
+            self._wait_until_paused(
+                time.monotonic() + timeout, timeout, poll_interval_s
+            )
+            self._post_and_rotate_token("resume")
 
     def kill(self) -> None:
         """Delete this sandbox and all its resources. Idempotent."""
